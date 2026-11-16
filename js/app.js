@@ -417,19 +417,34 @@ function bindPhotoViewer() {
     return Math.hypot(dx, dy);
   }
 
+  function layoutAfterViewerOpen() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!dialog.open) return;
+        setZoomFit();
+      });
+    });
+  }
+
   function openPhotoViewer() {
     const stop = getActiveStop();
     if (!stop?.photoThumb) return;
     titleEl.textContent = stop.name;
     img.alt = `${stop.name} 버스 시간표 사진`;
-    img.src = stop.photoThumb;
+    const src = stop.photoThumb;
     const onReady = () => {
-      setZoomFit();
       lockPageForPhotoViewer();
       if (typeof dialog.showModal === "function") dialog.showModal();
+      layoutAfterViewerOpen();
     };
-    if (img.complete && img.naturalWidth > 0) onReady();
-    else img.onload = () => onReady();
+    img.onload = () => onReady();
+    if (img.src !== src) {
+      img.src = src;
+    } else if (img.complete && img.naturalWidth > 0) {
+      onReady();
+    } else {
+      img.src = src;
+    }
   }
 
   function closePhotoViewer() {

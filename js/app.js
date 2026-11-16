@@ -92,9 +92,7 @@ function bindAppUpdateUi() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkAppVersionUpdate().catch(() => {});
-      syncServiceWorker()
-        .then(() => tryAutoApplyAppUpdate())
-        .catch(() => {});
+      syncServiceWorker().catch(() => {});
     } else {
       collapseListPanelDetails();
     }
@@ -177,26 +175,6 @@ async function checkAppVersionUpdate() {
   }
 }
 
-function canAutoApplyAppUpdate() {
-  const nameDialog = document.querySelector("#stop-name-dialog");
-  const photoViewer = document.querySelector("#photo-viewer");
-  return (
-    !photoPipelineBusy &&
-    !pendingStopDraft &&
-    !nameDialog?.open &&
-    !photoViewer?.open &&
-    document.visibilityState === "visible"
-  );
-}
-
-function tryAutoApplyAppUpdate() {
-  if (!canAutoApplyAppUpdate()) return false;
-  applyAppUpdate();
-  return true;
-}
-
-let appUpdateAutoApplyTimer = null;
-
 function showAppUpdateBanner(meta) {
   const banner = document.querySelector("#app-update-banner");
   if (banner && !banner.hidden) return;
@@ -214,15 +192,7 @@ function showAppUpdateBanner(meta) {
     updateBtn.className = "big-btn primary";
   }
   setBusStatus("");
-  void syncServiceWorker().then(() => {
-    if (appUpdateAutoApplyTimer) clearTimeout(appUpdateAutoApplyTimer);
-    if (registration?.waiting && canAutoApplyAppUpdate()) {
-      appUpdateAutoApplyTimer = window.setTimeout(() => {
-        appUpdateAutoApplyTimer = null;
-        tryAutoApplyAppUpdate();
-      }, 2500);
-    }
-  });
+  syncServiceWorker().catch(() => {});
 }
 
 async function applyAppUpdate() {

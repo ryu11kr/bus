@@ -89,6 +89,9 @@ function bindAppUpdateUi() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkAppVersionUpdate().catch(() => {});
+      syncServiceWorker()
+        .then(() => tryAutoApplyAppUpdate())
+        .catch(() => {});
     } else {
       collapseListPanelDetails();
     }
@@ -136,6 +139,23 @@ async function checkAppVersionUpdate() {
   }
 }
 
+function canAutoApplyAppUpdate() {
+  const nameDialog = document.querySelector("#stop-name-dialog");
+  const photoViewer = document.querySelector("#photo-viewer");
+  return (
+    !pendingStopDraft &&
+    !nameDialog?.open &&
+    !photoViewer?.open &&
+    document.visibilityState === "visible"
+  );
+}
+
+function tryAutoApplyAppUpdate() {
+  if (!canAutoApplyAppUpdate()) return false;
+  applyAppUpdate();
+  return true;
+}
+
 function showAppUpdateBanner(meta) {
   const banner = document.querySelector("#app-update-banner");
   if (banner) {
@@ -147,11 +167,10 @@ function showAppUpdateBanner(meta) {
     updateBtn.disabled = false;
     updateBtn.className = "big-btn primary";
   }
-  const label = meta?.label || (meta?.build ? `빌드 ${meta.build}` : "새 버전");
-  if (installHint) {
-    installHint.textContent = `${label} 이 올라왔습니다. 위 「업데이트」를 눌러 주세요.`;
-  }
   setBusStatus("");
+  window.setTimeout(() => {
+    tryAutoApplyAppUpdate();
+  }, 600);
 }
 
 function applyAppUpdate() {
@@ -1818,22 +1837,17 @@ function bindInstall() {
     deferredPrompt = event;
     installBtn.hidden = false;
     installBtn.disabled = false;
-    installHint.textContent = "앱 설치하기를 누르면 홈 화면 아이콘으로 열 수 있습니다.";
   });
 
   installBtn.addEventListener("click", async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
-    installHint.textContent = choice.outcome === "accepted"
-      ? "설치가 시작되었습니다."
-      : "설치를 나중에 할 수 있습니다.";
+    await deferredPrompt.userChoice;
     deferredPrompt = null;
     installBtn.disabled = true;
   });
 
   window.addEventListener("appinstalled", () => {
-    installHint.textContent = "설치가 완료되었습니다. 홈 화면 아이콘에서 열어 보세요.";
     renderDisplayMode();
   });
 }
@@ -2012,6 +2026,7 @@ function watchUpdates(reg) {
 function showUpdate(build) {
   if (document.body.classList.contains("bus-app")) {
     showAppUpdateBanner({ build, label: build ? `빌드 ${build}` : "새 버전" });
+    tryAutoApplyAppUpdate();
     return;
   }
   updateBtn.hidden = false;

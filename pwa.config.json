@@ -1,0 +1,14 @@
+﻿{
+    "slug":  "bus",
+    "name":  "내버스시간표",
+    "shortName":  "내버스시간표",
+    "description":  "정류장마다 이름을 붙여 시간표 사진을 저장하고 사진 속 내용을 정리해 보여 주는 앱",
+    "lang":  "ko",
+    "themeColor":  "#E9EDF0",
+    "backgroundColor":  "#E9EDF0",
+    "cachePrefix":  "bus-timetable",
+    "orientation":  "portrait",
+    "categories":  [
+                       "utilities"
+                   ]
+}

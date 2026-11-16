@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#E9EDF0" />
+    <meta
+      name="description"
+      content="시간표 사진을 등록하면 글자만 크게 읽기 쉽게 보여 주는 내버스시간표"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="내버스시간표" />
+    <title>내버스시간표</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body class="bus-app">
+    <header class="top-clock" aria-label="현재 시각">
+      <p class="top-clock-label">지금 시각</p>
+      <p id="now-clock" class="top-clock-time" aria-live="polite">--:--:--</p>
+      <p id="now-clock-ko" class="top-clock-ko"></p>
+    </header>
+
+    <div class="wrap bus-wrap">
+      <h1 class="app-name" id="app-title">내버스시간표</h1>
+      <p class="app-guide" id="app-lede">
+        정류장마다 <strong>내가 아는 이름</strong>을 붙이고
+        <strong>시간표 사진</strong>을 한 번 등록하세요. 화면에는
+        <strong>사진 대신 글자</strong>만 크게 보여 드립니다. (원본 사진은
+        필요할 때만 열 수 있습니다.)
+      </p>
+
+      <!-- 목록 화면 -->
+      <section id="view-list" class="view-list" aria-labelledby="stop-list-heading">
+        <h2 id="stop-list-heading" class="section-heading">내 정류장</h2>
+        <p id="stop-list-empty" class="times-empty">등록된 정류장이 없습니다. 아래에서 사진을 추가하세요.</p>
+        <ul id="stop-list" class="stop-list"></ul>
+
+        <div class="big-actions">
+          <button type="button" id="btn-new-camera" class="big-btn primary">
+            새 정류장 — 사진 찍기
+          </button>
+          <button type="button" id="btn-new-album" class="big-btn secondary">
+            새 정류장 — 앨범에서 고르기
+          </button>
+        </div>
+      </section>
+
+      <!-- 상세 화면 -->
+      <section id="view-detail" class="view-detail" hidden aria-labelledby="detail-stop-name">
+        <button type="button" id="btn-back-list" class="big-btn ghost back-btn">
+          ← 목록으로
+        </button>
+        <h2 id="detail-stop-name" class="detail-stop-name"></h2>
+        <p id="detail-updated" class="detail-meta"></p>
+
+        <div class="detail-text-panel" aria-labelledby="detail-stop-name">
+          <p class="detail-text-label">시간표 (글자로 보기)</p>
+          <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
+          <p id="detail-ocr-fallback" class="detail-ocr-fallback" hidden></p>
+          <p id="detail-empty-hint" class="detail-empty-hint" hidden>
+            글자가 비어 있습니다. 「인공지능으로 다시 읽기」 또는 「사진 다시
+            찍기」를 눌러 주세요.
+          </p>
+        </div>
+
+        <details class="original-photo panel-lite">
+          <summary class="original-photo-summary">원본 사진 보기 (보통은 안 봐도 됩니다)</summary>
+          <figure class="detail-photo-wrap">
+            <img
+              id="detail-photo"
+              alt="이 정류장 버스 시간표 원본 사진"
+              width="960"
+              height="720"
+              loading="lazy"
+            />
+          </figure>
+        </details>
+
+        <div class="helper-actions">
+          <button type="button" id="btn-ai-reread" class="big-btn primary">
+            인공지능으로 다시 읽기
+          </button>
+          <button type="button" id="btn-rename-stop" class="big-btn secondary">
+            이름 바꾸기
+          </button>
+          <button type="button" id="btn-replace-photo" class="big-btn secondary">
+            사진 다시 찍기
+          </button>
+          <button type="button" id="btn-delete-stop" class="big-btn ghost danger-text">
+            이 정류장 삭제
+          </button>
+        </div>
+      </section>
+
+      <details class="ai-settings panel-lite">
+        <summary>읽기 설정 (인터넷 사용)</summary>
+        <label class="ai-toggle">
+          <input id="ai-auto" type="checkbox" checked />
+          <span>기본 OCR이 비었거나 깨져 보일 때만 정밀 읽기 자동 시도</span>
+        </label>
+        <p id="ai-quota-status" class="ai-quota-status" aria-live="polite"></p>
+        <p class="ai-settings-hint">
+          정밀 읽기는 <strong>Google Gemini 무료 API</strong>를 씁니다 (개발자
+          키는 서버에만 둠). 로컬 <code>serve.cmd</code>만으로는 API가 없을 수
+          있습니다.
+        </p>
+      </details>
+
+      <main id="app" class="bus-main" aria-label="버스 시간표">
+        <input
+          id="file-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+        />
+        <input id="file-album" type="file" accept="image/*" hidden />
+
+        <p id="bus-status" class="bus-status" aria-live="polite" role="status"></p>
+        <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
+      </main>
+
+      <div class="install-row">
+        <button id="install-btn" type="button" class="big-btn secondary" hidden>
+          홈 화면에 추가
+        </button>
+        <button id="update-btn" type="button" class="big-btn ghost" hidden>
+          새 버전 적용
+        </button>
+        <p id="install-hint" class="hint install-hint"></p>
+      </div>
+
+      <section class="tech-only" hidden aria-hidden="true">
+        <span id="net-state"></span>
+        <span id="display-state"></span>
+        <strong id="sw-state"></strong>
+        <span id="sw-version"></span>
+        <button id="refresh-cache" type="button" hidden></button>
+        <ul id="cache-list" hidden></ul>
+      </section>
+
+      <dialog id="stop-name-dialog" class="add-time-dialog" aria-labelledby="stop-name-title">
+        <form id="stop-name-form" method="dialog">
+          <h2 id="stop-name-title">정류장 이름</h2>
+          <p class="dialog-help">
+            공식 이름이 아니어도 됩니다. 기억하기 쉬운 이름을 적어 주세요.
+          </p>
+          <label class="pick-field text-field">
+            <span>예: 우리집앞 정류장, 읍내정거장</span>
+            <input
+              id="stop-name-input"
+              type="text"
+              maxlength="40"
+              required
+              autocomplete="off"
+              placeholder="정류장 이름"
+            />
+          </label>
+          <div class="dialog-actions">
+            <button type="submit" class="big-btn primary">저장</button>
+            <button type="button" id="stop-name-cancel" class="big-btn ghost">
+              취소
+            </button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+    <script src="./js/app.js"></script>
+  </body>
+</html>

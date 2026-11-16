@@ -847,15 +847,11 @@ function clearNextBusHighlights() {
     el.classList.remove("ocr-line--next");
     el.querySelector(".ocr-line-next-badge")?.remove();
   });
-  document.querySelectorAll(".ocr-block-next-chip").forEach((el) => el.remove());
 }
 
 function applyNextBusHighlights(picks) {
   clearNextBusHighlights();
   if (!picks.length) return;
-
-  /** @type {Map<number, HTMLElement>} */
-  const chipByBlock = new Map();
 
   for (const pick of picks) {
     const selector =
@@ -870,23 +866,6 @@ function applyNextBusHighlights(picks) {
       badge.textContent = formatNextBusBadge(pick);
       el.append(badge);
     });
-
-    const section = document.querySelector(
-      `.ocr-block-direction[data-block-index="${pick.blockIndex}"]`
-    );
-    if (!section) continue;
-
-    let chip = chipByBlock.get(pick.blockIndex);
-    if (!chip) {
-      chip = document.createElement("p");
-      chip.className = "ocr-block-next-chip";
-      chip.dataset.blockIndex = String(pick.blockIndex);
-      const titleEl = section.querySelector(".ocr-block-title");
-      if (titleEl) titleEl.after(chip);
-      chipByBlock.set(pick.blockIndex, chip);
-    }
-    chip.textContent = formatNextBusBadge(pick);
-    chip.classList.toggle("is-tomorrow", Boolean(pick.isTomorrow));
   }
 }
 

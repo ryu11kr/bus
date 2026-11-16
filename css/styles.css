@@ -768,6 +768,11 @@ footer {
   width: 100%;
   margin-top: 1rem;
   margin-bottom: 0.25rem;
+  font-weight: 800;
+  color: #0c4a6e;
+  background: #e0f2fe;
+  border: 3px solid #0284c7;
+  box-shadow: var(--shadow);
 }
 
 .detail-stop-name {
@@ -860,23 +865,6 @@ footer {
   background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
   font-size: clamp(1.45rem, 5vw, 1.75rem);
   border-radius: 0.85rem 0.85rem 0 0;
-}
-
-.ocr-block-next-chip {
-  margin: 0 0 0.65rem;
-  padding: 0.55rem 0.85rem;
-  font-size: clamp(1.05rem, 3.5vw, 1.2rem);
-  font-weight: 800;
-  text-align: right;
-  color: #9a3412;
-  background: #fff7ed;
-  border: 2px solid #fdba74;
-  border-radius: 0.65rem;
-}
-
-.ocr-block-next-chip.is-tomorrow {
-  color: #7c2d12;
-  background: #ffedd5;
 }
 
 .ocr-block-placard {

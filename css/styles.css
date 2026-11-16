@@ -896,6 +896,7 @@ footer {
   font-size: clamp(1.05rem, 3.5vw, 1.25rem);
   font-weight: 800;
   color: #9a3412;
+  text-align: right;
 }
 
 .ocr-line--route {

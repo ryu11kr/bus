@@ -400,20 +400,18 @@ async function handleBusPhoto(input) {
     const blob = await fetch(thumb).then((r) => r.blob());
     const ocr = await recognizeTextFromImage(blob);
     let text = ocr.text.trim();
-    let sections = buildSectionsFromOcr(text);
     let ocrSource = "tesseract";
 
-    if (shouldTryAiRefine(text)) {
-      setBusStatus(
-        "기본 OCR 결과가 믿기 어렵습니다. 인공지능 정밀 읽기를 시도합니다…"
-      );
+    if (shouldUseAiRefineOnRegister()) {
+      setBusStatus("인공지능으로 시간표를 읽는 중입니다. 잠시만 기다려 주세요.");
       const ai = await refineTimetableWithAi(thumb);
       if (ai?.text) {
         text = ai.text.trim();
-        sections = buildSectionsFromOcr(text);
         ocrSource = "ai";
       }
     }
+
+    let sections = buildSectionsFromOcr(text);
 
     if (isOcrLowQuality(text)) {
       text = "";
@@ -565,7 +563,8 @@ function compactKoreanLine(text) {
 function isDirectionBlockTitle(title) {
   if (typeof title !== "string") return false;
   const c = compactKoreanLine(title.trim());
-  return c.length <= 24 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c);
+  if (c.length <= 28 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c)) return true;
+  return c.length <= 28 && /[→➔]/.test(title) && !/\d{1,2}[:：]/.test(c);
 }
 
 function isDirectionHeadingLine(line) {
@@ -574,8 +573,10 @@ function isDirectionHeadingLine(line) {
 }
 
 function formatDirectionTitle(title) {
-  const c = compactKoreanLine(title.trim());
-  if (!/.+방면$/.test(c)) return title.trim();
+  const t = title.trim();
+  const c = compactKoreanLine(t);
+  if (/[→➔]/.test(t) && !/.+방면$/.test(c)) return t;
+  if (!/.+방면$/.test(c)) return t;
   return `${c.replace(/방면$/, "")} 방면`;
 }
 
@@ -670,8 +671,25 @@ function stripPrivacyFromSections(sections) {
     .filter((block) => block.title || block.lines.length);
 }
 
+function countTimeTokens(line) {
+  return (line.match(/\d{1,2}\s*[:：.．]\s*\d{2}/g) || []).length;
+}
+
+/** 한 줄에 시각 두 개 + `|` 또는 12시간 괄호 (2열 표) */
+function lineHasPairedBusTimes(line) {
+  if (countTimeTokens(line) < 2) return false;
+  const times = [...line.matchAll(/\d{1,2}\s*[:：.．]\s*\d{2}/g)];
+  const between = line.slice(
+    times[0].index + times[0][0].length,
+    times[1].index
+  );
+  if (/[\|｜]/.test(between)) return true;
+  return /[\(\（]\s*\d{1,2}\s*[:：.．]/.test(between);
+}
+
 /** @param {string} line */
 function parseTimetableRowParts(line) {
+  if (lineHasPairedBusTimes(line)) return null;
   const timeMatch = line.match(/(\d{1,2}\s*[:：.．]\s*\d{2})/);
   if (!timeMatch) return null;
   const parsed = parseMinutesFromLine(line);
@@ -680,7 +698,11 @@ function parseTimetableRowParts(line) {
   const m = parsed % 60;
   const timeDisplay = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   let rest = line.slice((timeMatch.index ?? 0) + timeMatch[0].length);
-  rest = rest.replace(/^\s*[\|｜]\s*/, "").trim();
+  rest = rest
+    .replace(/^\s*[\|｜]\s*/, "")
+    .replace(/[\(\（][^)\）]*$/, "")
+    .replace(/^[\)\）\s]+/, "")
+    .trim();
   return { timeDisplay, destination: rest || null };
 }
 
@@ -688,7 +710,11 @@ function parseTimetableRowParts(line) {
 function blockUsesTableLayout(lines) {
   if (!lines?.length) return false;
   if (lines.some(isTableColumnHeader)) return true;
-  return lines.filter((l) => /[\|｜]/.test(l)).length >= 2;
+  const piped = lines.filter((l) => /[\|｜]/.test(l));
+  if (piped.length < 2) return false;
+  const pairedRows = piped.filter(lineHasPairedBusTimes);
+  if (pairedRows.length >= 2) return false;
+  return true;
 }
 
 /**
@@ -755,8 +781,10 @@ function parseMinutesFromLine(line) {
   }
   const match = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
   if (!match) return null;
-  const h = Number(match[1]);
+  let h = Number(match[1]);
   const m = Number(match[2]);
+  if (h >= 24 || m >= 60) return null;
+  h = infer24hFromParenContext(line, h);
   if (h >= 24 || m >= 60) return null;
   return h * 60 + m;
 }
@@ -1030,211 +1058,217 @@ function formatStopDate(iso) {
   }
 }
 
-/**
- * 이중 방면(장수/산서) 시간표처럼 한 줄에 시각이 두 번 나오면 좌·우로 나눔.
- * @param {string} text
- * @returns {{ title: string | null, lines: string[] }[]}
- */
-function isPildeokStyleBoard(text) {
-  return /장수\s*방면|산서\s*방면/.test(text);
-}
+/** OCR/AI에 보이는 열 머리글(→·방면 등). 지명은 하드코딩하지 않음. */
+const ROUTE_COLUMN_TITLE = /([가-힣A-Za-z0-9]{1,12}\s*(?:→|->|➔|-|~)\s*[가-힣A-Za-z0-9]{1,12})/g;
 
-/** 마을버스 등 「삼전 → 이천 | 이천 → 삼전」 2열 표 */
-const ROUTE_COLUMN_TITLE = /([가-힣]{1,8}\s*(?:→|->|➔)\s*[가-힣]{1,8})/g;
-
-function tryReorganizeRoutePairColumns(text) {
-  if (!/[→➔]|->/.test(text)) return null;
-
-  const rawLines = text
+function splitOcrLines(text) {
+  return text
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
+}
 
-  let leftTitle = null;
-  let rightTitle = null;
-  const left = [];
-  const right = [];
-  let placard = null;
+function lineLooksLikeTimeValue(line) {
+  return countTimeTokens(line) >= 1;
+}
 
-  for (const line of rawLines) {
-    if (/마을\s*버스|마을버스|시간표/.test(line) && !/\d{1,2}\s*[:：]/.test(line)) {
-      placard = line.replace(/[<>]/g, "").trim();
+function isCombinedDirectionHeader(line) {
+  const heads = [...line.matchAll(/([가-힣]{2,12}\s*방면)/g)];
+  return heads.length >= 2 && !lineLooksLikeTimeValue(line);
+}
+
+function isLikelyPlacardLine(line) {
+  if (lineLooksLikeTimeValue(line)) return false;
+  if (line.length > 36) return false;
+  if (/시간표/.test(line)) return true;
+  if (/^#\s+/.test(line)) return true;
+  return /[<>]/.test(line) && /버스|표/.test(line);
+}
+
+/** AI `##` 블록 출력을 그대로 섹션으로 변환 */
+function parseStructuredTimetableText(text) {
+  if (!/^##\s+/m.test(text) && !/^#\s+/m.test(text)) return null;
+
+  /** @type {{ title: string | null, lines: string[] }[]} */
+  const sections = [];
+  let current = null;
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+
+    const top = line.match(/^#\s+(.+)/);
+    const section = line.match(/^##\s+(.+)/);
+    if (top && !section) {
+      if (current?.title || current?.lines?.length) sections.push(current);
+      current = { title: top[1].trim(), lines: [] };
       continue;
     }
+    if (section) {
+      if (current?.title || current?.lines?.length) sections.push(current);
+      current = { title: section[1].trim(), lines: [] };
+      continue;
+    }
+    if (!current) current = { title: null, lines: [] };
+
+    if (lineLooksLikeTimeValue(line)) {
+      current.lines.push(normalizeTimetableTimeLine(line));
+    } else if (!isContactMetaLine(line)) {
+      current.lines.push(line);
+    }
+  }
+  if (current?.title || current?.lines?.length) sections.push(current);
+
+  const timed = sections.filter((s) =>
+    (s.lines || []).some((l) => countTimeTokens(l) >= 1)
+  );
+  return timed.length ? stripPrivacyFromSections(timed) : null;
+}
+
+function infer24hFromParenContext(line, hour) {
+  const paren = line.match(/[\(\（]\s*(\d{1,2})\s*[:：.．]\s*(\d{2})\s*[\)\）]/);
+  if (!paren || hour >= 13) return hour;
+  const ampH = Number(paren[1]);
+  const times = [...line.matchAll(/(\d{1,2})\s*[:：.．]\s*(\d{2})/g)];
+  if (times.length < 2) return hour;
+  const peerH = Number(times[1][1]);
+  if (peerH >= 13 && hour <= 11 && ampH >= 1 && ampH <= 12) {
+    return ampH === 12 ? 12 : ampH + 12;
+  }
+  return hour;
+}
+
+function extractNormalizedTime(line, timeIndex) {
+  const times = [...line.matchAll(/(\d{1,2})\s*[:：.．]\s*(\d{2})/g)];
+  if (!times[timeIndex]) return null;
+  const slice =
+    timeIndex === 0
+      ? line.slice(0, times.length > 1 ? times[1].index : line.length)
+      : line.slice(times[timeIndex].index ?? 0);
+  return normalizeTimetableTimeLine(slice);
+}
+
+function collectColumnTitlesFromText(rawLines) {
+  let leftTitle = null;
+  let rightTitle = null;
+  /** @type {string[]} */
+  const headingStack = [];
+
+  for (const line of rawLines) {
+    if (lineLooksLikeTimeValue(line)) continue;
+    if (isContactMetaLine(line) || isJunkTimetableHeaderLine(line)) continue;
 
     const routes = [...line.matchAll(ROUTE_COLUMN_TITLE)];
     if (routes.length >= 2) {
       leftTitle = routes[0][1].trim();
       rightTitle = routes[1][1].trim();
-      continue;
+      break;
     }
-    if (routes.length === 1 && !/\d{1,2}\s*[:：]/.test(line)) {
-      if (!leftTitle) leftTitle = routes[0][1].trim();
-      else if (!rightTitle && routes[0][1].trim() !== leftTitle) {
-        rightTitle = routes[0][1].trim();
-      }
-      continue;
+    if (routes.length === 1) {
+      const name = routes[0][1].trim();
+      if (!leftTitle) leftTitle = name;
+      else if (!rightTitle && name !== leftTitle) rightTitle = name;
     }
-
-    const times = [...line.matchAll(/\d{1,2}\s*[:：.．]\s*\d{2}/g)];
-    if (times.length >= 2) {
-      const splitAt = times[1].index ?? line.length;
-      const l = normalizeTimetableTimeLine(line.slice(0, splitAt));
-      const r = normalizeTimetableTimeLine(line.slice(splitAt));
-      if (l) left.push(l);
-      if (r) right.push(r);
-    } else if (times.length === 1) {
-      const t = normalizeTimetableTimeLine(line);
-      if (!t) continue;
-      if (left.length <= right.length) left.push(t);
-      else right.push(t);
+    if (isDirectionHeadingLine(line)) headingStack.push(formatDirectionTitle(line));
+    else if (
+      !leftTitle &&
+      line.length <= 28 &&
+      /[→➔]|방향|행$|출발/.test(line)
+    ) {
+      headingStack.push(line.trim());
     }
   }
 
-  if (left.length < 2 || right.length < 2) return null;
+  if (!leftTitle && headingStack[0]) leftTitle = headingStack[0];
+  if (!rightTitle && headingStack[1]) rightTitle = headingStack[1];
+  return { leftTitle, rightTitle };
+}
+
+/**
+ * 2열 표: OCR에 보이는 머리글 + 한 줄에 시각 2개 또는 번갈아 한 시각.
+ * 특정 지명·정류장 전용 분기 없음.
+ */
+function tryReorganizeTwoColumnBoard(text) {
+  const rawLines = splitOcrLines(text);
+  if (!rawLines.length) return null;
+
+  let placard = null;
+  const { leftTitle, rightTitle } = collectColumnTitlesFromText(rawLines);
+  const left = [];
+  const right = [];
+  let pairedRows = 0;
+  /** @type {string[]} */
+  const singles = [];
+
+  for (const line of rawLines) {
+    if (isLikelyPlacardLine(line)) {
+      placard = line.replace(/^[#]+\s*/, "").replace(/[<>]/g, "").trim();
+      continue;
+    }
+    if (isJunkTimetableHeaderLine(line) || isCombinedDirectionHeader(line)) continue;
+    if (isDirectionHeadingLine(line)) continue;
+    if (!lineLooksLikeTimeValue(line)) {
+      const routes = [...line.matchAll(ROUTE_COLUMN_TITLE)];
+      if (routes.length) continue;
+    }
+
+    if (lineHasPairedBusTimes(line)) {
+      pairedRows++;
+      const l = extractNormalizedTime(line, 0);
+      const r = extractNormalizedTime(line, 1);
+      if (l) left.push(l);
+      if (r) right.push(r);
+    } else if (countTimeTokens(line) === 1) {
+      singles.push(normalizeTimetableTimeLine(line));
+    }
+  }
+
+  for (const t of singles) {
+    if (left.length <= right.length) left.push(t);
+    else right.push(t);
+  }
+
+  const twoCols = left.length >= 2 && right.length >= 2;
+  if (!twoCols) return null;
+  if (pairedRows < 2 && singles.length < 4 && !(leftTitle && rightTitle)) return null;
 
   const sections = [];
   if (placard) sections.push({ title: placard, lines: [] });
-  sections.push({ title: leftTitle || "왼쪽 노선", lines: left });
-  sections.push({ title: rightTitle || "오른쪽 노선", lines: right });
+  sections.push({ title: leftTitle || "첫째 열", lines: left });
+  sections.push({ title: rightTitle || "둘째 열", lines: right });
   return sections;
 }
 
 function normalizeTimetableTimeLine(line) {
   const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
   if (!m) return line.trim();
-  const h = Number(m[1]);
+  let h = Number(m[1]);
   const min = Number(m[2]);
   if (h >= 24 || min >= 60) return line.trim();
+  h = infer24hFromParenContext(line, h);
   const time = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
   let rest = line.slice((m.index ?? 0) + m[0].length);
-  rest = rest.replace(/^\s*[\|｜]\s*/, "").replace(/\(.*$/, "").trim();
+  rest = rest
+    .replace(/^\s*[\|｜]\s*/, "")
+    .replace(/[\(\（][^)\）]*[\)\）]?/, "")
+    .replace(/^[\)\）\s]+/, "")
+    .trim();
   return rest ? `${time} ${rest}` : time;
 }
 
-function buildSectionsFromOcr(text) {
-  const routeCols = tryReorganizeRoutePairColumns(text);
-  if (routeCols) return routeCols;
-  const dual = tryReorganizeDualDirectionBoard(text);
-  if (dual) return dual;
-  const interleaved = tryReorganizeInterleavedBoard(text);
-  if (interleaved) return interleaved;
-  return organizeOcrText(text);
-}
-
-/** AI/OCR이 한 줄에 시각 하나씩 번갈아 나열할 때(필덕입구 표) 장수·산서로 나눔. */
-function tryReorganizeInterleavedBoard(text) {
-  if (!isPildeokStyleBoard(text)) return null;
-
-  const rawLines = text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  let placard = null;
-  const timeLines = [];
-
-  for (const line of rawLines) {
-    if (isJunkTimetableHeaderLine(line)) continue;
-    if (/^[가-힣]{2,10}입구$/.test(line) && !/\d{1,2}:\d{2}/.test(line)) {
-      placard = line;
-      continue;
-    }
-    if (/\d{1,2}:\d{2}/.test(line)) {
-      const parts = splitLineIntoDirectionTimes(line);
-      if (parts) {
-        if (parts[0]) timeLines.push({ side: "left", text: parts[0] });
-        if (parts[1]) timeLines.push({ side: "right", text: parts[1] });
-      } else {
-        timeLines.push({ side: "auto", text: line });
-      }
-    }
-  }
-
-  if (timeLines.length < 4) return null;
-
-  const left = [];
-  const right = [];
-  for (const entry of timeLines) {
-    if (entry.side === "left") left.push(entry.text);
-    else if (entry.side === "right") right.push(entry.text);
-    else if (entry.side === "auto") {
-      if (left.length <= right.length) left.push(entry.text);
-      else right.push(entry.text);
-    }
-  }
-
-  if (left.length < 2 || right.length < 2) return null;
-
-  const sections = [];
-  if (placard) sections.push({ title: placard, lines: [] });
-  sections.push({ title: "장수 방면", lines: left });
-  sections.push({ title: "산서 방면", lines: right });
-  return sections;
-}
-
 function isJunkTimetableHeaderLine(line) {
-  if (/^장수군$|^장수말|장수버스|식천\s*www/i.test(line)) return true;
-  if (/^장수\s*방면$|^산서\s*방면$/.test(line)) return true;
-  if (/^장수\s*방면\s*산서\s*방면/.test(line)) return true;
+  if (/www\.|http|\.kr\b/i.test(line)) return true;
+  if (isCombinedDirectionHeader(line)) return true;
   if (/^=\s*가$|^[=\-|]{1,3}$/.test(line)) return true;
   return false;
 }
 
-function splitLineIntoDirectionTimes(line) {
-  const times = [...line.matchAll(/\d{1,2}:\d{2}/g)];
-  if (times.length < 2) return null;
-  const splitAt = times[1].index ?? line.length;
-  return [line.slice(0, splitAt).trim(), line.slice(splitAt).trim()];
-}
-
-function tryReorganizeDualDirectionBoard(text) {
-  if (!isPildeokStyleBoard(text)) return null;
-
-  const rawLines = text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  const towardJangsu = [];
-  const towardSanseo = [];
-  let placard = null;
-  let pairedRows = 0;
-
-  for (const line of rawLines) {
-    if (/^필덕입구$/.test(line) || /^[가-힣]{2,8}입구$/.test(line)) {
-      placard = line;
-      continue;
-    }
-    if (/장수군|장수버스|www\.|http|\.kr$/i.test(line)) continue;
-    if (/^장수\s*방면\s*산서\s*방면/.test(line)) continue;
-    if (/^장수\s*방면$|^산서\s*방면$/.test(line)) continue;
-    if (line.length < 2) continue;
-
-    const times = [...line.matchAll(/\d{1,2}:\d{2}/g)];
-    if (times.length >= 2) {
-      pairedRows++;
-      const splitAt = times[1].index ?? line.length;
-      const left = line.slice(0, splitAt).trim();
-      const right = line.slice(splitAt).trim();
-      if (left) towardJangsu.push(left);
-      if (right) towardSanseo.push(right);
-    } else if (times.length === 1) {
-      const only = line.trim();
-      if ((times[0].index ?? 99) <= 3) towardJangsu.push(only);
-      else towardSanseo.push(only);
-    }
-  }
-
-  if (pairedRows < 2 && (towardJangsu.length < 2 || towardSanseo.length < 2)) {
-    return null;
-  }
-
-  const sections = [];
-  if (placard) sections.push({ title: placard, lines: [] });
-  if (towardJangsu.length) sections.push({ title: "장수 방면", lines: towardJangsu });
-  if (towardSanseo.length) sections.push({ title: "산서 방면", lines: towardSanseo });
-  return sections.length ? sections : null;
+function buildSectionsFromOcr(text) {
+  const structured = parseStructuredTimetableText(text);
+  if (structured?.length) return structured;
+  const twoCol = tryReorganizeTwoColumnBoard(text);
+  if (twoCol) return twoCol;
+  return organizeOcrText(text);
 }
 
 /**
@@ -1363,13 +1397,10 @@ function estimateOcrConfidence(text) {
   return score;
 }
 
-/**
- * 1차 OCR이 비었거나, 스크린샷처럼 깨진 글자만 나올 때 정밀 읽기 시도.
- */
-function shouldTryAiRefine(text) {
+/** 등록 시 표 구조를 맞추려면 이미지 기반 정밀 읽기를 우선한다. */
+function shouldUseAiRefineOnRegister() {
   if (!getAiSettings().auto) return false;
-  if (!navigator.onLine) return false;
-  return isOcrLowQuality(text);
+  return navigator.onLine;
 }
 
 function isOcrLowQuality(text) {

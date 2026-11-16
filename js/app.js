@@ -300,42 +300,103 @@ function bindBusUi() {
   });
 }
 
-/** 상세 화면 사진 — 전체 화면 확대·스크롤 */
+let photoViewerScrollLockY = 0;
+
+function lockPageForPhotoViewer() {
+  photoViewerScrollLockY = window.scrollY || 0;
+  document.body.classList.add("photo-viewer-lock");
+  document.body.style.top = `-${photoViewerScrollLockY}px`;
+}
+
+function unlockPageForPhotoViewer() {
+  document.body.classList.remove("photo-viewer-lock");
+  document.body.style.top = "";
+  window.scrollTo(0, photoViewerScrollLockY);
+}
+
+/** 상세 화면 사진 — 전체 화면 핀치·팬 (이 레이어만) */
 function bindPhotoViewer() {
   const dialog = document.querySelector("#photo-viewer");
   const stage = document.querySelector("#photo-viewer-stage");
+  const pan = document.querySelector("#photo-viewer-pan");
   const img = document.querySelector("#photo-viewer-img");
   const titleEl = document.querySelector("#photo-viewer-title");
   const btnClose = document.querySelector("#photo-viewer-close");
   const btnFit = document.querySelector("#photo-viewer-fit");
   const btnZoom = document.querySelector("#photo-viewer-zoom-in");
   const btnExpand = document.querySelector("#btn-expand-photo");
-  if (!dialog || !stage || !img) return;
+  if (!dialog || !stage || !pan || !img) return;
 
-  /** @type {number} */
-  let zoomFactor = 1;
-  const MAX_ZOOM = 3;
+  const MAX_USER_ZOOM = 3;
 
-  function stageWidth() {
-    return stage.clientWidth || window.innerWidth;
+  let fitScale = 1;
+  let userZoom = 1;
+  let tx = 0;
+  let ty = 0;
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let panPointerId = null;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panOriginTx = 0;
+  let panOriginTy = 0;
+
+  function stageMetrics() {
+    return { w: stage.clientWidth, h: stage.clientHeight };
+  }
+
+  function totalScale() {
+    return fitScale * userZoom;
+  }
+
+  function clampPan() {
+    const { w, h } = stageMetrics();
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+    const s = totalScale();
+    const dw = iw * s;
+    const dh = ih * s;
+    const margin = 24;
+    const minTx = Math.min(margin, w - dw - margin);
+    const maxTx = Math.max(w - dw - margin, margin);
+    const minTy = Math.min(margin, h - dh - margin);
+    const maxTy = Math.max(h - dh - margin, margin);
+    if (dw <= w) tx = (w - dw) / 2;
+    else tx = Math.min(maxTx, Math.max(minTx, tx));
+    if (dh <= h) ty = (h - dh) / 2;
+    else ty = Math.min(maxTy, Math.max(minTy, ty));
+  }
+
+  function applyViewerTransform() {
+    clampPan();
+    const s = totalScale();
+    pan.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
   }
 
   function setZoomFit() {
-    zoomFactor = 1;
     if (!img.naturalWidth) return;
-    const sw = stageWidth();
-    const scale = sw / img.naturalWidth;
-    img.style.width = `${Math.round(img.naturalWidth * scale)}px`;
-    img.style.height = "auto";
-    stage.scrollTop = 0;
-    stage.scrollLeft = 0;
+    const { w, h } = stageMetrics();
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+    fitScale = Math.min(w / iw, h / ih, 1);
+    userZoom = 1;
+    img.style.width = `${iw}px`;
+    img.style.height = `${ih}px`;
+    const s = totalScale();
+    tx = (w - iw * s) / 2;
+    ty = (h - ih * s) / 2;
+    applyViewerTransform();
   }
 
   function zoomInStep() {
-    zoomFactor = Math.min(MAX_ZOOM, zoomFactor * 1.35);
-    const baseW = stageWidth();
-    img.style.width = `${Math.round(baseW * zoomFactor)}px`;
-    img.style.height = "auto";
+    userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.35);
+    applyViewerTransform();
+  }
+
+  function touchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
   }
 
   function openPhotoViewer() {
@@ -346,36 +407,94 @@ function bindPhotoViewer() {
     img.src = stop.photoThumb;
     const onReady = () => {
       setZoomFit();
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      }
+      lockPageForPhotoViewer();
+      if (typeof dialog.showModal === "function") dialog.showModal();
     };
     if (img.complete && img.naturalWidth > 0) onReady();
     else img.onload = () => onReady();
   }
 
+  function closePhotoViewer() {
+    dialog.close();
+  }
+
   btnExpand?.addEventListener("click", openPhotoViewer);
-
-  btnClose?.addEventListener("click", () => dialog.close());
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
-  dialog.addEventListener("cancel", () => {
-    img.onload = null;
-  });
-
+  btnClose?.addEventListener("click", closePhotoViewer);
   btnFit?.addEventListener("click", setZoomFit);
   btnZoom?.addEventListener("click", zoomInStep);
 
+  dialog.addEventListener("close", () => {
+    img.onload = null;
+    unlockPageForPhotoViewer();
+    userZoom = 1;
+    panPointerId = null;
+  });
+
   let lastTap = 0;
-  img.addEventListener("click", (e) => {
-    e.stopPropagation();
+  stage.addEventListener("click", (e) => {
+    if (e.target !== stage && e.target !== pan && e.target !== img) return;
     const now = Date.now();
     if (now - lastTap < 320) {
-      if (zoomFactor > 1.05) setZoomFit();
+      if (userZoom > 1.05) setZoomFit();
       else zoomInStep();
     }
     lastTap = now;
+  });
+
+  stage.addEventListener(
+    "touchstart",
+    (e) => {
+      if (!dialog.open) return;
+      if (e.touches.length === 2) {
+        pinchStartDist = touchDistance(e.touches);
+        pinchStartZoom = userZoom;
+        panPointerId = null;
+      } else if (e.touches.length === 1) {
+        panPointerId = e.touches[0].identifier;
+        panStartX = e.touches[0].clientX;
+        panStartY = e.touches[0].clientY;
+        panOriginTx = tx;
+        panOriginTy = ty;
+      }
+    },
+    { passive: true }
+  );
+
+  stage.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!dialog.open) return;
+      e.preventDefault();
+      if (e.touches.length === 2) {
+        const dist = touchDistance(e.touches);
+        if (pinchStartDist > 0) {
+          const ratio = dist / pinchStartDist;
+          userZoom = Math.min(MAX_USER_ZOOM, Math.max(1, pinchStartZoom * ratio));
+          applyViewerTransform();
+        }
+      } else if (e.touches.length === 1 && panPointerId != null && userZoom > 1.01) {
+        const t = e.touches[0];
+        if (t.identifier !== panPointerId) return;
+        tx = panOriginTx + (t.clientX - panStartX);
+        ty = panOriginTy + (t.clientY - panStartY);
+        applyViewerTransform();
+      }
+    },
+    { passive: false }
+  );
+
+  stage.addEventListener("touchend", () => {
+    pinchStartDist = 0;
+    panPointerId = null;
+  });
+
+  const blockPageGesture = (e) => {
+    if (!document.body.classList.contains("bus-app")) return;
+    e.preventDefault();
+  };
+
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+    document.addEventListener(type, blockPageGesture, { passive: false });
   });
 
   window.addEventListener("resize", () => {

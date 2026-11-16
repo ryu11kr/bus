@@ -31,9 +31,21 @@ body {
   min-height: 100dvh;
   overflow-x: clip;
   overscroll-behavior-x: none;
-  touch-action: pan-y pinch-zoom;
   background: var(--bg);
   color: var(--text);
+}
+
+body.bus-app {
+  touch-action: pan-y;
+}
+
+body.bus-app.photo-viewer-lock {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 img,
@@ -1253,6 +1265,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   color: #fff;
   flex-direction: column;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 .photo-viewer[open] {
@@ -1290,14 +1304,19 @@ body.bus-app button.detail-photo-hit:focus-visible {
 .photo-viewer-stage {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
   background: #0a0a0a;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 0.35rem;
+}
+
+.photo-viewer-pan {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .photo-viewer-img {
@@ -1306,6 +1325,7 @@ body.bus-app button.detail-photo-hit:focus-visible {
   height: auto;
   user-select: none;
   -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .photo-viewer-actions {

@@ -69,7 +69,9 @@
             <ul class="home-more-list">
               <li>시간표가 화면에 <strong>크게</strong> 들어오게 가까이 찍어 주세요.</li>
               <li>저장 시 <strong>자동 최적화</strong>합니다. 밝고 흔들림 없이 찍을수록 좋습니다.</li>
-              <li>볼 때 <strong>「더 크게」</strong>로 확대하고 손가락으로 밀어 세부를 볼 수 있습니다.</li>
+              <li>
+                크게 볼 때만 손가락 확대·밀기가 됩니다. 목록·첫 화면에서는 안 됩니다.
+              </li>
             </ul>
           </details>
 
@@ -161,32 +163,6 @@
         <ul id="cache-list" hidden></ul>
       </section>
 
-      <dialog
-        id="photo-viewer"
-        class="photo-viewer"
-        aria-labelledby="photo-viewer-title"
-        aria-modal="true"
-      >
-        <header class="photo-viewer-head">
-          <p id="photo-viewer-title" class="photo-viewer-title"></p>
-          <button type="button" id="photo-viewer-close" class="photo-viewer-close big-btn primary">
-            닫기
-          </button>
-        </header>
-        <div id="photo-viewer-stage" class="photo-viewer-stage" tabindex="-1">
-          <img id="photo-viewer-img" class="photo-viewer-img" alt="" decoding="async" />
-        </div>
-        <div class="photo-viewer-actions">
-          <button type="button" id="photo-viewer-fit" class="big-btn secondary">
-            화면에 맞춤
-          </button>
-          <button type="button" id="photo-viewer-zoom-in" class="big-btn secondary">
-            더 크게
-          </button>
-        </div>
-        <p class="photo-viewer-hint">두 번 누르면 확대·맞춤이 바뀝니다. 밀어서 시간을 확인하세요.</p>
-      </dialog>
-
       <dialog id="stop-name-dialog" class="add-time-dialog" aria-labelledby="stop-name-title">
         <form id="stop-name-form" method="dialog">
           <h2 id="stop-name-title">정류장 이름</h2>
@@ -213,6 +189,37 @@
         </form>
       </dialog>
     </div>
+
+    <dialog
+      id="photo-viewer"
+      class="photo-viewer"
+      aria-labelledby="photo-viewer-title"
+      aria-modal="true"
+    >
+      <header class="photo-viewer-head">
+        <p id="photo-viewer-title" class="photo-viewer-title"></p>
+        <button type="button" id="photo-viewer-close" class="photo-viewer-close big-btn primary">
+          닫기
+        </button>
+      </header>
+      <div id="photo-viewer-stage" class="photo-viewer-stage" tabindex="-1">
+        <div id="photo-viewer-pan" class="photo-viewer-pan">
+          <img id="photo-viewer-img" class="photo-viewer-img" alt="" decoding="async" />
+        </div>
+      </div>
+      <div class="photo-viewer-actions">
+        <button type="button" id="photo-viewer-fit" class="big-btn secondary">
+          화면에 맞춤
+        </button>
+        <button type="button" id="photo-viewer-zoom-in" class="big-btn secondary">
+          더 크게
+        </button>
+      </div>
+      <p class="photo-viewer-hint">
+        두 손가락으로 확대·축소, 한 손가락으로 밀기. 여기서만 핀치가 됩니다.
+      </p>
+    </dialog>
+
     <script src="./js/app.js"></script>
   </body>
 </html>

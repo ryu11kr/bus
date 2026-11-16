@@ -140,15 +140,6 @@
       </section>
 
       <main id="app" class="bus-main" aria-label="버스 시간표" hidden>
-        <input
-          id="file-camera"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-        />
-        <input id="file-album" type="file" accept="image/*" hidden />
-
         <button id="update-btn" type="button" class="big-btn ghost" hidden>
           새 버전 적용
         </button>
@@ -189,6 +180,24 @@
         </form>
       </dialog>
     </div>
+
+    <input
+      id="file-camera"
+      class="bus-file-input"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      tabindex="-1"
+      aria-hidden="true"
+    />
+    <input
+      id="file-album"
+      class="bus-file-input"
+      type="file"
+      accept="image/*"
+      tabindex="-1"
+      aria-hidden="true"
+    />
 
     <dialog
       id="photo-viewer"

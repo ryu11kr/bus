@@ -59,6 +59,8 @@ let pendingStopAction = null;
 /** @type {string | null} */
 let replaceStopId = null;
 let clockTimerId = null;
+/** 사진 처리 중 — 자동 업데이트 새로고침 방지 */
+let photoPipelineBusy = false;
 
 /** 새 앱 로직은 이 함수에 넣으세요. */
 function initApp() {
@@ -143,6 +145,7 @@ function canAutoApplyAppUpdate() {
   const nameDialog = document.querySelector("#stop-name-dialog");
   const photoViewer = document.querySelector("#photo-viewer");
   return (
+    !photoPipelineBusy &&
     !pendingStopDraft &&
     !nameDialog?.open &&
     !photoViewer?.open &&
@@ -233,11 +236,15 @@ function bindBusUi() {
 
   btnNewCamera?.addEventListener("click", () => {
     pendingStopAction = "new";
-    document.querySelector("#file-camera")?.click();
+    const input = document.querySelector("#file-camera");
+    if (input) input.value = "";
+    input?.click();
   });
   btnNewAlbum?.addEventListener("click", () => {
     pendingStopAction = "new";
-    document.querySelector("#file-album")?.click();
+    const input = document.querySelector("#file-album");
+    if (input) input.value = "";
+    input?.click();
   });
   btnBack?.addEventListener("click", () => {
     activeStopId = null;
@@ -671,7 +678,16 @@ function migrateLegacyBusStorage() {
 }
 
 function saveBusState() {
-  localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+  try {
+    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+    return true;
+  } catch (error) {
+    console.error(error);
+    setBusStatus(
+      "저장 공간이 부족합니다. 정류장을 줄이거나 브라우저 데이터를 비운 뒤 다시 시도해 주세요."
+    );
+    return false;
+  }
 }
 
 function syncBusMainVisibility() {
@@ -700,8 +716,8 @@ function setOcrProgress(show, value) {
 
 async function handleBusPhoto(input) {
   const file = input?.files?.[0];
-  input.value = "";
   if (!file) return;
+  photoPipelineBusy = true;
 
   if (!REGISTER_PHOTO_ONLY && !navigator.onLine) {
     setBusStatus("등록하려면 인터넷이 필요합니다. 와이파이·데이터를 켠 뒤 다시 시도해 주세요.");
@@ -717,7 +733,8 @@ async function handleBusPhoto(input) {
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
-    const thumb = await compressImageFile(file, PHOTO_MAX_WIDTH, (phase) => {
+    const maxW = effectivePhotoMaxWidth();
+    const thumb = await compressImageFile(file, maxW, (phase) => {
       if (!REGISTER_PHOTO_ONLY) return;
       if (phase === "enhance") {
         setBusStatus("밝기·선명도를 자동 보정하는 중입니다…");
@@ -775,11 +792,17 @@ async function handleBusPhoto(input) {
     );
   } catch (error) {
     console.error(error);
-    setBusStatus("사진 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    const hint =
+      error?.name === "QuotaExceededError"
+        ? "저장 공간이 부족합니다. 다른 정류장 사진을 줄이거나 앱 데이터를 비운 뒤 다시 시도해 주세요."
+        : "사진 처리에 실패했습니다. 다른 사진으로 다시 시도해 주세요.";
+    setBusStatus(hint);
     pendingStopDraft = null;
     pendingStopAction = null;
     replaceStopId = null;
   } finally {
+    if (input) input.value = "";
+    photoPipelineBusy = false;
     setOcrProgress(false);
   }
 }
@@ -1504,16 +1527,47 @@ function isLikelySectionTitle(line) {
  * @param {File} file
  * @param {number} maxWidth
  */
+function effectivePhotoMaxWidth() {
+  const narrow =
+    window.matchMedia("(max-width: 768px)").matches ||
+    /iPhone|iPad|Android/i.test(navigator.userAgent);
+  return narrow ? Math.min(PHOTO_MAX_WIDTH, 1280) : PHOTO_MAX_WIDTH;
+}
+
+/** @param {File} file */
+async function loadImageSourceFromFile(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return { kind: "bitmap", source: await createImageBitmap(file) };
+    } catch {
+    }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("image-load"));
+      el.src = url;
+    });
+    return { kind: "image", source: img };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * @param {File} file
  * @param {number} maxWidth
  * @param {(phase: "enhance" | "encode") => void} [progress]
  */
 async function compressImageFile(file, maxWidth, progress) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxWidth / bitmap.width);
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
+  const loaded = await loadImageSourceFromFile(file);
+  const srcW = loaded.source.width;
+  const srcH = loaded.source.height;
+  const scale = Math.min(1, maxWidth / srcW);
+  const w = Math.round(srcW * scale);
+  const h = Math.round(srcH * scale);
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -1521,10 +1575,15 @@ async function compressImageFile(file, maxWidth, progress) {
   if (!ctx) throw new Error("canvas");
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  ctx.drawImage(loaded.source, 0, 0, w, h);
+  if (loaded.kind === "bitmap" && loaded.source.close) loaded.source.close();
   if (REGISTER_PHOTO_ONLY) {
     progress?.("enhance");
-    await autoOptimizePhotoOnCanvas(ctx, w, h);
+    try {
+      await autoOptimizePhotoOnCanvas(ctx, w, h);
+    } catch (error) {
+      console.warn("photo enhance skipped", error);
+    }
   }
   progress?.("encode");
   await yieldToUi();

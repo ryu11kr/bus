@@ -43,6 +43,21 @@ body.bus-app {
   touch-action: pan-y;
 }
 
+.bus-file-input {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0.01;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body.bus-app.photo-viewer-lock {
   position: fixed;
   inset: 0;

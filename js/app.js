@@ -637,12 +637,24 @@ function isTableColumnHeader(line) {
 }
 
 function isContactMetaLine(line) {
-  return (
-    /\(전화\)/.test(line) ||
-    /정류소/.test(line) ||
-    /010[\s\-·]?\d{4}/.test(line) ||
-    /슈퍼|마트/.test(line)
-  );
+  const t = String(line).trim();
+  if (!t) return false;
+  if (/\(전화\)|전화\s*[:：]/.test(t)) return true;
+  if (/010[\s\-·]?\d{4}/.test(t)) return true;
+  if (/\d{2,4}\s*[-·．]\s*\d{3,4}/.test(t) && /정류|마트|슈퍼|문의|택시|운수/.test(t)) {
+    return true;
+  }
+  if (/정류소|슈퍼\s*마트|봉화\s*슈퍼/.test(t) && /\d/.test(t)) return true;
+  return false;
+}
+
+function stripPrivacyFromSections(sections) {
+  return sections
+    .map((block) => ({
+      ...block,
+      lines: (block.lines || []).filter((line) => !isContactMetaLine(line)),
+    }))
+    .filter((block) => block.title || block.lines.length);
 }
 
 /** @param {string} line */
@@ -717,7 +729,7 @@ function getStopSections(stop) {
     : stop.sections?.length
       ? stop.sections
       : [];
-  return normalizeSectionsForDisplay(built);
+  return stripPrivacyFromSections(normalizeSectionsForDisplay(built));
 }
 
 /** @param {string} line */

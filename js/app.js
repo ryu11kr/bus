@@ -87,7 +87,8 @@ function bindAppUpdateUi() {
   if (appVersionPollId) clearInterval(appVersionPollId);
   appVersionPollId = window.setInterval(() => {
     checkAppVersionUpdate().catch(() => {});
-  }, 45_000);
+    syncServiceWorker().catch(() => {});
+  }, 20_000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkAppVersionUpdate().catch(() => {});
@@ -105,7 +106,10 @@ async function fetchAppVersionMeta() {
   const tryUrls = ["/api/app-version", "./version.json"];
   for (const path of tryUrls) {
     try {
-      const response = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+      const response = await fetch(`${path}?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (!response.ok) continue;
       const data = await response.json();
       if (data?.build != null) return data;
@@ -115,15 +119,47 @@ async function fetchAppVersionMeta() {
   return null;
 }
 
+/** @returns {{ build?: number, commitSha?: string, updatedAt?: string } | null} */
+function readSeenAppVersion() {
+  const raw = localStorage.getItem(APP_VERSION_SEEN_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? { build: n } : null;
+}
+
+function writeSeenAppVersion(meta) {
+  if (!meta?.build) return;
+  localStorage.setItem(
+    APP_VERSION_SEEN_KEY,
+    JSON.stringify({
+      build: meta.build,
+      commitSha: meta.commitSha || null,
+      updatedAt: meta.updatedAt || null,
+    })
+  );
+}
+
+function serverVersionIsNewer(meta, seen) {
+  if (!meta?.build || !seen) return false;
+  if (meta.commitSha && seen.commitSha) return meta.commitSha !== seen.commitSha;
+  if (meta.updatedAt && seen.updatedAt) return meta.updatedAt !== seen.updatedAt;
+  return Number(meta.build) !== Number(seen.build);
+}
+
 async function bootstrapAppVersionCheck() {
   const meta = await fetchAppVersionMeta();
   if (!meta?.build) return;
-  const seen = Number(localStorage.getItem(APP_VERSION_SEEN_KEY));
-  if (!Number.isFinite(seen) || seen <= 0) {
-    localStorage.setItem(APP_VERSION_SEEN_KEY, String(meta.build));
+  const seen = readSeenAppVersion();
+  if (!seen) {
+    writeSeenAppVersion(meta);
     return;
   }
-  if (meta.build !== seen) {
+  if (serverVersionIsNewer(meta, seen)) {
     showAppUpdateBanner(meta);
   }
 }
@@ -131,12 +167,12 @@ async function bootstrapAppVersionCheck() {
 async function checkAppVersionUpdate() {
   const meta = await fetchAppVersionMeta();
   if (!meta?.build) return;
-  const seen = Number(localStorage.getItem(APP_VERSION_SEEN_KEY));
-  if (!Number.isFinite(seen) || seen <= 0) {
-    localStorage.setItem(APP_VERSION_SEEN_KEY, String(meta.build));
+  const seen = readSeenAppVersion();
+  if (!seen) {
+    writeSeenAppVersion(meta);
     return;
   }
-  if (meta.build !== seen) {
+  if (serverVersionIsNewer(meta, seen)) {
     showAppUpdateBanner(meta);
   }
 }
@@ -159,11 +195,18 @@ function tryAutoApplyAppUpdate() {
   return true;
 }
 
+let appUpdateAutoApplyTimer = null;
+
 function showAppUpdateBanner(meta) {
   const banner = document.querySelector("#app-update-banner");
+  if (banner && !banner.hidden) return;
+  const label = meta?.label || (meta?.build ? `빌드 ${meta.build}` : "새 버전");
   if (banner) {
     banner.hidden = false;
     if (meta?.build != null) banner.dataset.pendingBuild = String(meta.build);
+    if (meta?.commitSha) banner.dataset.pendingSha = meta.commitSha;
+    const title = banner.querySelector(".app-update-banner-text");
+    if (title) title.textContent = `새 버전이 나왔어요 (${label})`;
   }
   if (updateBtn) {
     updateBtn.hidden = false;
@@ -171,29 +214,51 @@ function showAppUpdateBanner(meta) {
     updateBtn.className = "big-btn primary";
   }
   setBusStatus("");
-  window.setTimeout(() => {
-    tryAutoApplyAppUpdate();
-  }, 600);
+  void syncServiceWorker().then(() => {
+    if (appUpdateAutoApplyTimer) clearTimeout(appUpdateAutoApplyTimer);
+    if (registration?.waiting && canAutoApplyAppUpdate()) {
+      appUpdateAutoApplyTimer = window.setTimeout(() => {
+        appUpdateAutoApplyTimer = null;
+        tryAutoApplyAppUpdate();
+      }, 2500);
+    }
+  });
 }
 
-function applyAppUpdate() {
-  const pending = document.querySelector("#app-update-banner")?.dataset.pendingBuild;
-  const finish = () => {
-    if (pending) localStorage.setItem(APP_VERSION_SEEN_KEY, pending);
-    else {
-      fetchAppVersionMeta().then((m) => {
-        if (m?.build) localStorage.setItem(APP_VERSION_SEEN_KEY, String(m.build));
+async function applyAppUpdate() {
+  const banner = document.querySelector("#app-update-banner");
+  const pending = banner?.dataset.pendingBuild;
+  const pendingSha = banner?.dataset.pendingSha;
+
+  const finish = async () => {
+    const meta = await fetchAppVersionMeta();
+    if (meta) writeSeenAppVersion(meta);
+    else if (pending || pendingSha) {
+      writeSeenAppVersion({
+        build: pending ? Number(pending) : 0,
+        commitSha: pendingSha || null,
       });
     }
-    location.reload();
+    const url = new URL(location.href);
+    url.searchParams.set("v", pending || String(Date.now()));
+    location.replace(url.toString());
   };
+
+  if (registration) {
+    try {
+      await registration.update();
+    } catch {
+    }
+  }
   if (registration?.waiting) {
     reloadOnControllerChange = true;
     registration.waiting.postMessage({ type: "SKIP_WAITING" });
-    window.setTimeout(finish, 500);
+    window.setTimeout(() => {
+      finish();
+    }, 400);
     return;
   }
-  finish();
+  await finish();
 }
 
 function getAiSettings() {
@@ -2042,6 +2107,13 @@ async function syncServiceWorker() {
   const controllerBuild = getControllerBuild();
 
   renderBuildStatus(serverBuild, controllerBuild, versionInfo);
+
+  if (document.body.classList.contains("bus-app") && versionInfo) {
+    const seen = readSeenAppVersion();
+    if (seen && serverVersionIsNewer(versionInfo, seen)) {
+      showAppUpdateBanner(versionInfo);
+    }
+  }
   setDevServerHint(versionInfo);
 
   if (!versionInfo) {
@@ -2107,8 +2179,11 @@ function watchUpdates(reg) {
 
 function showUpdate(build) {
   if (document.body.classList.contains("bus-app")) {
-    showAppUpdateBanner({ build, label: build ? `빌드 ${build}` : "새 버전" });
-    tryAutoApplyAppUpdate();
+    fetchVersionInfo().then((info) => {
+      showAppUpdateBanner(
+        info || { build, label: build ? `빌드 ${build}` : "새 버전" }
+      );
+    });
     return;
   }
   updateBtn.hidden = false;

@@ -207,9 +207,6 @@
     >
       <header class="photo-viewer-head">
         <p id="photo-viewer-title" class="photo-viewer-title"></p>
-        <button type="button" id="photo-viewer-close" class="photo-viewer-close big-btn primary">
-          닫기
-        </button>
       </header>
       <div id="photo-viewer-stage" class="photo-viewer-stage" tabindex="-1">
         <div id="photo-viewer-pan" class="photo-viewer-pan">
@@ -222,19 +219,25 @@
           />
         </div>
       </div>
-      <div class="photo-viewer-actions">
-        <button type="button" id="photo-viewer-fit" class="big-btn secondary">
-          화면에 맞춤
+      <footer class="photo-viewer-foot">
+        <div class="photo-viewer-actions">
+          <button type="button" id="photo-viewer-fit" class="big-btn secondary">
+            화면에 맞춤
+          </button>
+          <button type="button" id="photo-viewer-zoom-out" class="big-btn secondary">
+            작게
+          </button>
+          <button type="button" id="photo-viewer-zoom-in" class="big-btn secondary">
+            더 크게
+          </button>
+        </div>
+        <button type="button" id="photo-viewer-close" class="photo-viewer-close big-btn primary">
+          닫기
         </button>
-        <button type="button" id="photo-viewer-zoom-in" class="big-btn secondary">
-          더 크게
-        </button>
-      </div>
-      <p class="photo-viewer-hint">
-        「더 크게」 후 마우스로 끌거나, 손가락으로 확대·밀기.
-        <br class="resp-br" />
-        여기서만 핀치·끌기가 됩니다.
-      </p>
+        <p class="photo-viewer-hint">
+          「더 크게」·「작게」·손가락 핀치. 맞춤 크기보다 더 작아지지 않습니다.
+        </p>
+      </footer>
     </dialog>
 
     <script src="./js/app.js"></script>

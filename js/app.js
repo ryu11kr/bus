@@ -370,7 +370,8 @@ function bindPhotoViewer() {
   const titleEl = document.querySelector("#photo-viewer-title");
   const btnClose = document.querySelector("#photo-viewer-close");
   const btnFit = document.querySelector("#photo-viewer-fit");
-  const btnZoom = document.querySelector("#photo-viewer-zoom-in");
+  const btnZoomIn = document.querySelector("#photo-viewer-zoom-in");
+  const btnZoomOut = document.querySelector("#photo-viewer-zoom-out");
   const btnExpand = document.querySelector("#btn-expand-photo");
   if (!dialog || !stage || !pan || !img) return;
 
@@ -419,6 +420,13 @@ function bindPhotoViewer() {
     clampPan();
     const s = totalScale();
     pan.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+    updateViewerZoomButtons();
+  }
+
+  function updateViewerZoomButtons() {
+    const atFit = userZoom <= 1.01;
+    if (btnZoomOut) btnZoomOut.disabled = atFit;
+    if (btnFit) btnFit.disabled = atFit;
   }
 
   function setZoomFit() {
@@ -440,8 +448,21 @@ function bindPhotoViewer() {
   function zoomInStep() {
     userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.35);
     applyViewerTransform();
-    if (userZoom > 1.01) stage.classList.add("photo-viewer-stage--pan");
-    else stage.classList.remove("photo-viewer-stage--pan");
+    stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
+  }
+
+  function zoomOutStep() {
+    if (userZoom <= 1.01) {
+      setZoomFit();
+      return;
+    }
+    userZoom = Math.max(1, userZoom / 1.35);
+    if (userZoom <= 1.01) {
+      setZoomFit();
+      return;
+    }
+    applyViewerTransform();
+    stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
   }
 
   function canPanImage() {
@@ -505,7 +526,8 @@ function bindPhotoViewer() {
   btnExpand?.addEventListener("click", openPhotoViewer);
   btnClose?.addEventListener("click", closePhotoViewer);
   btnFit?.addEventListener("click", setZoomFit);
-  btnZoom?.addEventListener("click", zoomInStep);
+  btnZoomIn?.addEventListener("click", zoomInStep);
+  btnZoomOut?.addEventListener("click", zoomOutStep);
 
   dialog.addEventListener("close", () => {
     img.onload = null;
@@ -597,6 +619,7 @@ function bindPhotoViewer() {
       if (pinchStartDist > 0) {
         const ratio = dist / pinchStartDist;
         userZoom = Math.min(MAX_USER_ZOOM, Math.max(1, pinchStartZoom * ratio));
+        if (userZoom <= 1.01) userZoom = 1;
         applyViewerTransform();
         stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
       }

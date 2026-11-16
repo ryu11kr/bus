@@ -1319,9 +1319,18 @@ body.bus-app button.detail-photo-hit:focus-visible {
   line-height: 1.35;
 }
 
-.photo-viewer-close {
+.photo-viewer-foot {
   flex: 0 0 auto;
-  min-width: 5.5rem;
+  background: #1a222b;
+  border-top: 2px solid #2d3847;
+  padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
+}
+
+.photo-viewer-close {
+  display: block;
+  width: calc(100% - 1.7rem);
+  margin: 0.5rem 0.85rem 0;
+  min-height: 3.75rem;
 }
 
 .photo-viewer-stage {
@@ -1364,10 +1373,9 @@ body.bus-app button.detail-photo-hit:focus-visible {
 
 .photo-viewer-actions {
   display: flex;
-  gap: 0.65rem;
-  padding: 0.75rem 0.85rem;
-  background: #1a222b;
-  border-top: 2px solid #2d3847;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem 0;
+  background: transparent;
 }
 
 .photo-viewer-actions .big-btn {
@@ -1376,15 +1384,20 @@ body.bus-app button.detail-photo-hit:focus-visible {
 
 .photo-viewer-hint {
   margin: 0;
-  padding: 0.55rem 0.85rem max(0.85rem, env(safe-area-inset-bottom));
-  font-size: 1rem;
+  padding: 0.45rem 0.85rem 0;
+  font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.45;
   text-align: center;
   word-break: keep-all;
   overflow-wrap: break-word;
   color: #cbd5e1;
-  background: #141a22;
+  background: transparent;
+}
+
+.photo-viewer-foot .big-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .photo-viewer-hint .resp-br {

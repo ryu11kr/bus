@@ -555,6 +555,52 @@ function isDirectionBlockTitle(title) {
   return typeof title === "string" && /방면\s*$/.test(title.trim());
 }
 
+function isDirectionHeadingLine(line) {
+  const t = line.trim();
+  return t.length <= 20 && /.+방면\s*$/.test(t) && !/\d{1,2}\s*[:：]/.test(t);
+}
+
+/** 한 블록 안에 「봉화방면」 등이 줄로 붙어 있으면 방면별 블록으로 쪼갬 */
+function splitSectionsByDirectionHeadings(sections) {
+  /** @type {{ title: string | null, lines: string[] }[]} */
+  const out = [];
+
+  for (const block of sections) {
+    const lines = block.lines || [];
+    const inlineHeadings = lines.filter(isDirectionHeadingLine).length;
+    if (inlineHeadings < 1) {
+      out.push(block);
+      continue;
+    }
+
+    let current = {
+      title: block.title,
+      lines: [],
+    };
+
+    const flush = () => {
+      if (current.title || current.lines.length) {
+        out.push({
+          title: current.title,
+          lines: [...current.lines],
+        });
+      }
+    };
+
+    for (const line of lines) {
+      if (isDirectionHeadingLine(line)) {
+        flush();
+        current = { title: line.trim(), lines: [] };
+      } else {
+        current.lines.push(line);
+      }
+    }
+    flush();
+  }
+
+  return out.length ? out : sections;
+}
+
 function isTableColumnHeader(line) {
   const compact = line.replace(/\s+/g, "");
   return (
@@ -640,11 +686,12 @@ function buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout) {
 }
 
 function getStopSections(stop) {
-  return stop.ocrText?.trim()
+  const built = stop.ocrText?.trim()
     ? buildSectionsFromOcr(stop.ocrText)
     : stop.sections?.length
       ? stop.sections
       : [];
+  return splitSectionsByDirectionHeadings(built);
 }
 
 /** @param {string} line */
@@ -773,11 +820,15 @@ function clearNextBusHighlights() {
     el.classList.remove("ocr-line--next");
     el.querySelector(".ocr-line-next-badge")?.remove();
   });
+  document.querySelectorAll(".ocr-block-next-chip").forEach((el) => el.remove());
 }
 
 function applyNextBusHighlights(picks) {
   clearNextBusHighlights();
   if (!picks.length) return;
+
+  /** @type {Map<number, HTMLElement>} */
+  const chipByBlock = new Map();
 
   for (const pick of picks) {
     const selector =
@@ -792,6 +843,24 @@ function applyNextBusHighlights(picks) {
       badge.textContent = formatNextBusBadge(pick);
       el.append(badge);
     });
+
+    const section = document.querySelector(
+      `.ocr-block[data-block-index="${pick.blockIndex}"]`
+    );
+    if (!section) continue;
+
+    let chip = chipByBlock.get(pick.blockIndex);
+    if (!chip) {
+      chip = document.createElement("p");
+      chip.className = "ocr-block-next-chip";
+      chip.dataset.blockIndex = String(pick.blockIndex);
+      const titleEl = section.querySelector(".ocr-block-title");
+      if (titleEl) titleEl.after(chip);
+      else section.prepend(chip);
+      chipByBlock.set(pick.blockIndex, chip);
+    }
+    chip.textContent = formatNextBusBadge(pick);
+    chip.classList.toggle("is-tomorrow", Boolean(pick.isTomorrow));
   }
 }
 

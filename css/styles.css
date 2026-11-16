@@ -764,6 +764,12 @@ footer {
   margin-bottom: 0.75rem;
 }
 
+.back-btn-bottom {
+  width: 100%;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
 .detail-stop-name {
   margin: 0 0 0.35rem;
   font-size: clamp(1.75rem, 7vw, 2.25rem);
@@ -840,11 +846,34 @@ footer {
 .ocr-block-direction {
   border-color: #0284c7;
   background: #f8fafc;
+  padding-top: 0;
+  overflow: hidden;
 }
 
 .ocr-block-direction .ocr-block-title {
-  color: #0c4a6e;
+  margin: 0 -1rem 0.65rem;
+  padding: 0.8rem 1rem;
+  color: #fff;
+  background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
   font-size: clamp(1.45rem, 5vw, 1.75rem);
+  border-radius: 0.85rem 0.85rem 0 0;
+}
+
+.ocr-block-next-chip {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.85rem;
+  font-size: clamp(1.05rem, 3.5vw, 1.2rem);
+  font-weight: 800;
+  text-align: right;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 2px solid #fdba74;
+  border-radius: 0.65rem;
+}
+
+.ocr-block-next-chip.is-tomorrow {
+  color: #7c2d12;
+  background: #ffedd5;
 }
 
 .ocr-block-placard {

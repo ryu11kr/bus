@@ -844,8 +844,11 @@ footer {
 }
 
 .ocr-block-direction {
+  margin-top: 0.35rem;
   border-color: #0284c7;
+  border-width: 2px;
   background: #f8fafc;
+  padding: 0 1rem 1rem;
   padding-top: 0;
   overflow: hidden;
 }

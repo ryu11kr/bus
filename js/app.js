@@ -232,12 +232,6 @@ function bindBusUi() {
     document.querySelector(useCamera ? "#file-camera" : "#file-album")?.click();
   });
 
-  document.querySelector("#btn-ai-reread")?.addEventListener("click", () => {
-    const stop = getActiveStop();
-    if (!stop) return;
-    runAiRefineForStop(stop.id).catch(() => {});
-  });
-
   btnDelete?.addEventListener("click", () => {
     const stop = getActiveStop();
     if (!stop) return;
@@ -433,7 +427,7 @@ async function handleBusPhoto(input) {
         ? ocrSource.includes("ai")
           ? "인공지능으로 글자를 읽었습니다. 정류장 이름을 적어 주세요."
           : "사진에서 글자를 읽었습니다. 정류장 이름을 적어 주세요."
-        : "글자가 잘 안 보입니다. 이름을 적고 저장하면 사진은 그대로 둡니다. 상세 화면에서 ‘인공지능으로 다시 읽기’를 눌러 보세요."
+        : "글자가 잘 안 보입니다. 이름을 적고 저장하면 사진은 그대로 둡니다. 나중에 「사진 다시 찍기」로 깨끗하게 다시 찍어 주세요."
     );
   } catch (error) {
     console.error(error);
@@ -551,54 +545,86 @@ function lineDisplayClass(line) {
   return "ocr-line--body";
 }
 
+function compactKoreanLine(text) {
+  return text.replace(/\s+/g, "");
+}
+
 function isDirectionBlockTitle(title) {
-  return typeof title === "string" && /방면\s*$/.test(title.trim());
+  if (typeof title !== "string") return false;
+  const c = compactKoreanLine(title.trim());
+  return c.length <= 24 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c);
 }
 
 function isDirectionHeadingLine(line) {
-  const t = line.trim();
-  return t.length <= 20 && /.+방면\s*$/.test(t) && !/\d{1,2}\s*[:：]/.test(t);
+  const c = compactKoreanLine(String(line).trim());
+  return c.length <= 24 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c);
 }
 
-/** 한 블록 안에 「봉화방면」 등이 줄로 붙어 있으면 방면별 블록으로 쪼갬 */
-function splitSectionsByDirectionHeadings(sections) {
+function formatDirectionTitle(title) {
+  const c = compactKoreanLine(title.trim());
+  if (!/.+방면$/.test(c)) return title.trim();
+  return `${c.replace(/방면$/, "")} 방면`;
+}
+
+/** 방면 제목·줄을 기준으로 재산형 표를 블록 단위로 펼친다 */
+function normalizeSectionsForDisplay(sections) {
   /** @type {{ title: string | null, lines: string[] }[]} */
   const out = [];
 
   for (const block of sections) {
-    const lines = block.lines || [];
-    const inlineHeadings = lines.filter(isDirectionHeadingLine).length;
-    if (inlineHeadings < 1) {
-      out.push(block);
-      continue;
+    /** @type {{ kind: "title" | "line", text: string }[]} */
+    const stream = [];
+    if (block.title?.trim()) {
+      stream.push({ kind: "title", text: block.title.trim() });
+    }
+    for (const line of block.lines || []) {
+      if (line?.trim()) stream.push({ kind: "line", text: line.trim() });
     }
 
-    let current = {
-      title: block.title,
-      lines: [],
-    };
+    let current = { title: null, lines: [] };
 
     const flush = () => {
-      if (current.title || current.lines.length) {
-        out.push({
-          title: current.title,
-          lines: [...current.lines],
-        });
-      }
+      if (!current.title && !current.lines.length) return;
+      out.push({
+        title: current.title,
+        lines: [...current.lines],
+      });
+      current = { title: null, lines: [] };
     };
 
-    for (const line of lines) {
-      if (isDirectionHeadingLine(line)) {
+    for (const item of stream) {
+      const text = item.text;
+      if (isDirectionHeadingLine(text)) {
         flush();
-        current = { title: line.trim(), lines: [] };
-      } else {
-        current.lines.push(line);
+        current = { title: formatDirectionTitle(text), lines: [] };
+        continue;
       }
+
+      if (item.kind === "title") {
+        flush();
+        current = {
+          title: isDirectionBlockTitle(text)
+            ? formatDirectionTitle(text)
+            : text,
+          lines: [],
+        };
+        continue;
+      }
+
+      if (
+        current.title &&
+        compactKoreanLine(text) === compactKoreanLine(current.title) &&
+        isDirectionBlockTitle(current.title)
+      ) {
+        continue;
+      }
+
+      current.lines.push(text);
     }
     flush();
   }
 
-  return out.length ? out : sections;
+  return out.filter((b) => b.title || b.lines.some((l) => l.trim()));
 }
 
 function isTableColumnHeader(line) {
@@ -691,7 +717,7 @@ function getStopSections(stop) {
     : stop.sections?.length
       ? stop.sections
       : [];
-  return splitSectionsByDirectionHeadings(built);
+  return normalizeSectionsForDisplay(built);
 }
 
 /** @param {string} line */
@@ -788,6 +814,7 @@ function computeNextBusByGroup(sections, now = new Date()) {
   const picks = [];
 
   sections.forEach((block, blockIndex) => {
+    if (!isDirectionBlockTitle(block.title)) return;
     const groups = splitLinesIntoRouteGroups(block.lines || []);
     groups.forEach((group, groupIndex) => {
       const next = findNextBusInLines(group.lines, now);
@@ -845,7 +872,7 @@ function applyNextBusHighlights(picks) {
     });
 
     const section = document.querySelector(
-      `.ocr-block[data-block-index="${pick.blockIndex}"]`
+      `.ocr-block-direction[data-block-index="${pick.blockIndex}"]`
     );
     if (!section) continue;
 
@@ -856,7 +883,6 @@ function applyNextBusHighlights(picks) {
       chip.dataset.blockIndex = String(pick.blockIndex);
       const titleEl = section.querySelector(".ocr-block-title");
       if (titleEl) titleEl.after(chip);
-      else section.prepend(chip);
       chipByBlock.set(pick.blockIndex, chip);
     }
     chip.textContent = formatNextBusBadge(pick);
@@ -922,7 +948,9 @@ function renderStopDetail(stopId) {
       if (block.title) {
         const heading = document.createElement("h3");
         heading.className = "ocr-block-title";
-        heading.textContent = block.title;
+        heading.textContent = isDirection
+          ? formatDirectionTitle(block.title)
+          : block.title;
         section.append(heading);
       }
 
@@ -936,6 +964,14 @@ function renderStopDetail(stopId) {
         : "ocr-block-lines";
 
       for (const line of block.lines) {
+        if (isDirectionHeadingLine(line)) continue;
+        if (
+          block.title &&
+          compactKoreanLine(line) === compactKoreanLine(block.title) &&
+          isDirectionBlockTitle(block.title)
+        ) {
+          continue;
+        }
         if (useTableLayout && isTableColumnHeader(line)) {
           if (colheadDone) continue;
           colheadDone = true;
@@ -1165,7 +1201,7 @@ function organizeOcrText(text) {
 
 function isLikelySectionTitle(line) {
   if (line.length > 28) return false;
-  if (/.+\s*방면\s*$/.test(line) && line.length <= 18) return true;
+  if (isDirectionHeadingLine(line)) return true;
   const keywords =
     /(평일|주말|토요|일요|공휴|비번|노선|방향|출발|도착|행|회차|첫차|막차|심야|시내|읍내|마을|시간표|배차|운행|요일|격일|순환)/;
   if (keywords.test(line)) return true;
@@ -1363,33 +1399,6 @@ async function refineTimetableWithAi(dataUrl) {
       "정밀 읽기 서버에 연결하지 못했습니다. Vercel 배포와 GEMINI_API_KEY 설정을 확인하세요."
     );
     return null;
-  } finally {
-    setOcrProgress(false);
-  }
-}
-
-async function runAiRefineForStop(stopId) {
-  const stop = busStops.find((s) => s.id === stopId);
-  if (!stop) return;
-
-  if (!navigator.onLine) {
-    setBusStatus("정밀 읽기는 인터넷이 필요합니다.");
-    return;
-  }
-
-  setBusStatus("인공지능이 시간표를 읽고 있습니다…");
-  setOcrProgress(true, 0.2);
-  try {
-    const ai = await refineTimetableWithAi(stop.photoThumb);
-    if (!ai?.text) return;
-
-    stop.ocrText = ai.text.trim();
-    stop.sections = buildSectionsFromOcr(stop.ocrText);
-    stop.updatedAt = new Date().toISOString();
-    saveBusState();
-    renderStopDetail(stop.id);
-    renderStopList();
-    setBusStatus("인공지능으로 다시 읽었습니다.");
   } finally {
     setOcrProgress(false);
   }

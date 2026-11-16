@@ -63,9 +63,107 @@ function initApp() {
   bindBusUi();
   bindAiSettingsUi();
   refreshAiQuotaUi().catch(() => {});
+  bindAppUpdateUi();
   startLiveClock();
   showListView();
   renderStopList();
+}
+
+const APP_VERSION_SEEN_KEY = "bus-app-version-seen-build";
+let appVersionPollId = null;
+
+function bindAppUpdateUi() {
+  document.querySelector("#app-update-apply")?.addEventListener("click", () => {
+    applyAppUpdate();
+  });
+  bootstrapAppVersionCheck().catch(() => {});
+  if (appVersionPollId) clearInterval(appVersionPollId);
+  appVersionPollId = window.setInterval(() => {
+    checkAppVersionUpdate().catch(() => {});
+  }, 45_000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      checkAppVersionUpdate().catch(() => {});
+    }
+  });
+}
+
+async function fetchAppVersionMeta() {
+  const tryUrls = ["/api/app-version", "./version.json"];
+  for (const path of tryUrls) {
+    try {
+      const response = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) continue;
+      const data = await response.json();
+      if (data?.build != null) return data;
+    } catch {
+    }
+  }
+  return null;
+}
+
+async function bootstrapAppVersionCheck() {
+  const meta = await fetchAppVersionMeta();
+  if (!meta?.build) return;
+  const seen = Number(localStorage.getItem(APP_VERSION_SEEN_KEY));
+  if (!Number.isFinite(seen) || seen <= 0) {
+    localStorage.setItem(APP_VERSION_SEEN_KEY, String(meta.build));
+    return;
+  }
+  if (meta.build !== seen) {
+    showAppUpdateBanner(meta);
+  }
+}
+
+async function checkAppVersionUpdate() {
+  const meta = await fetchAppVersionMeta();
+  if (!meta?.build) return;
+  const seen = Number(localStorage.getItem(APP_VERSION_SEEN_KEY));
+  if (!Number.isFinite(seen) || seen <= 0) {
+    localStorage.setItem(APP_VERSION_SEEN_KEY, String(meta.build));
+    return;
+  }
+  if (meta.build !== seen) {
+    showAppUpdateBanner(meta);
+  }
+}
+
+function showAppUpdateBanner(meta) {
+  const banner = document.querySelector("#app-update-banner");
+  if (banner) {
+    banner.hidden = false;
+    if (meta?.build != null) banner.dataset.pendingBuild = String(meta.build);
+  }
+  if (updateBtn) {
+    updateBtn.hidden = false;
+    updateBtn.disabled = false;
+    updateBtn.className = "big-btn primary";
+  }
+  const label = meta?.label || (meta?.build ? `빌드 ${meta.build}` : "새 버전");
+  if (installHint) {
+    installHint.textContent = `${label} 이 올라왔습니다. 위 「업데이트」를 눌러 주세요.`;
+  }
+  setBusStatus("");
+}
+
+function applyAppUpdate() {
+  const pending = document.querySelector("#app-update-banner")?.dataset.pendingBuild;
+  const finish = () => {
+    if (pending) localStorage.setItem(APP_VERSION_SEEN_KEY, pending);
+    else {
+      fetchAppVersionMeta().then((m) => {
+        if (m?.build) localStorage.setItem(APP_VERSION_SEEN_KEY, String(m.build));
+      });
+    }
+    location.reload();
+  };
+  if (registration?.waiting) {
+    reloadOnControllerChange = true;
+    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    window.setTimeout(finish, 500);
+    return;
+  }
+  finish();
 }
 
 function getAiSettings() {
@@ -1057,6 +1155,10 @@ function bindServiceWorker() {
   }, 3000);
 
   updateBtn.addEventListener("click", () => {
+    if (document.body.classList.contains("bus-app")) {
+      applyAppUpdate();
+      return;
+    }
     if (!registration?.waiting) return;
     reloadOnControllerChange = true;
     registration.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -1190,6 +1292,10 @@ function watchUpdates(reg) {
 }
 
 function showUpdate(build) {
+  if (document.body.classList.contains("bus-app")) {
+    showAppUpdateBanner({ build, label: build ? `빌드 ${build}` : "새 버전" });
+    return;
+  }
   updateBtn.hidden = false;
   updateBtn.disabled = false;
   swState.textContent = "업데이트 대기";

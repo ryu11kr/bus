@@ -1035,7 +1035,86 @@ function formatStopDate(iso) {
  * @param {string} text
  * @returns {{ title: string | null, lines: string[] }[]}
  */
+function isPildeokStyleBoard(text) {
+  return /장수\s*방면|산서\s*방면/.test(text);
+}
+
+/** 마을버스 등 「삼전 → 이천 | 이천 → 삼전」 2열 표 */
+const ROUTE_COLUMN_TITLE = /([가-힣]{1,8}\s*(?:→|->|➔)\s*[가-힣]{1,8})/g;
+
+function tryReorganizeRoutePairColumns(text) {
+  if (!/[→➔]|->/.test(text)) return null;
+
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  let leftTitle = null;
+  let rightTitle = null;
+  const left = [];
+  const right = [];
+  let placard = null;
+
+  for (const line of rawLines) {
+    if (/마을\s*버스|마을버스|시간표/.test(line) && !/\d{1,2}\s*[:：]/.test(line)) {
+      placard = line.replace(/[<>]/g, "").trim();
+      continue;
+    }
+
+    const routes = [...line.matchAll(ROUTE_COLUMN_TITLE)];
+    if (routes.length >= 2) {
+      leftTitle = routes[0][1].trim();
+      rightTitle = routes[1][1].trim();
+      continue;
+    }
+    if (routes.length === 1 && !/\d{1,2}\s*[:：]/.test(line)) {
+      if (!leftTitle) leftTitle = routes[0][1].trim();
+      else if (!rightTitle && routes[0][1].trim() !== leftTitle) {
+        rightTitle = routes[0][1].trim();
+      }
+      continue;
+    }
+
+    const times = [...line.matchAll(/\d{1,2}\s*[:：.．]\s*\d{2}/g)];
+    if (times.length >= 2) {
+      const splitAt = times[1].index ?? line.length;
+      const l = normalizeTimetableTimeLine(line.slice(0, splitAt));
+      const r = normalizeTimetableTimeLine(line.slice(splitAt));
+      if (l) left.push(l);
+      if (r) right.push(r);
+    } else if (times.length === 1) {
+      const t = normalizeTimetableTimeLine(line);
+      if (!t) continue;
+      if (left.length <= right.length) left.push(t);
+      else right.push(t);
+    }
+  }
+
+  if (left.length < 2 || right.length < 2) return null;
+
+  const sections = [];
+  if (placard) sections.push({ title: placard, lines: [] });
+  sections.push({ title: leftTitle || "왼쪽 노선", lines: left });
+  sections.push({ title: rightTitle || "오른쪽 노선", lines: right });
+  return sections;
+}
+
+function normalizeTimetableTimeLine(line) {
+  const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
+  if (!m) return line.trim();
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h >= 24 || min >= 60) return line.trim();
+  const time = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  let rest = line.slice((m.index ?? 0) + m[0].length);
+  rest = rest.replace(/^\s*[\|｜]\s*/, "").replace(/\(.*$/, "").trim();
+  return rest ? `${time} ${rest}` : time;
+}
+
 function buildSectionsFromOcr(text) {
+  const routeCols = tryReorganizeRoutePairColumns(text);
+  if (routeCols) return routeCols;
   const dual = tryReorganizeDualDirectionBoard(text);
   if (dual) return dual;
   const interleaved = tryReorganizeInterleavedBoard(text);
@@ -1045,7 +1124,7 @@ function buildSectionsFromOcr(text) {
 
 /** AI/OCR이 한 줄에 시각 하나씩 번갈아 나열할 때(필덕입구 표) 장수·산서로 나눔. */
 function tryReorganizeInterleavedBoard(text) {
-  if (!/장수\s*방면|산서\s*방면|방면/.test(text)) return null;
+  if (!isPildeokStyleBoard(text)) return null;
 
   const rawLines = text
     .split(/\r?\n/)
@@ -1110,9 +1189,7 @@ function splitLineIntoDirectionTimes(line) {
 }
 
 function tryReorganizeDualDirectionBoard(text) {
-  const hasDirection = /장수\s*방면|산서\s*방면|방면/.test(text);
-  const hasPairedTimes = /\d{1,2}:\d{2}.+\d{1,2}:\d{2}/.test(text);
-  if (!hasDirection && !hasPairedTimes) return null;
+  if (!isPildeokStyleBoard(text)) return null;
 
   const rawLines = text
     .split(/\r?\n/)

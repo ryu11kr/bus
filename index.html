@@ -49,35 +49,41 @@
         <p id="stop-list-empty" class="times-empty">등록된 정류장이 없습니다.</p>
         <ul id="stop-list" class="stop-list"></ul>
 
-        <details class="home-more panel-lite">
-          <summary>사진찍기 가이드</summary>
-          <figure class="photo-guide-figure">
-            <img
-              class="photo-guide-sample"
-              src="./images/photo-guide-sample.jpg"
-              width="640"
-              height="960"
-              loading="lazy"
-              alt="촬영 예시: 정류장 시간표 전체가 화면에 들어오고 시각·글자가 크게 보이는 사진"
-            />
-            <figcaption>
-              예시: 시각표 부분만 크게. 아래 연락처·전화는 <strong>넣지 않습니다</strong>.
-            </figcaption>
-          </figure>
-          <ul class="home-more-list">
-            <li>시각·숫자가 휴대폰 화면에 <strong>크게</strong> 보이게 가까이 찍어 주세요.</li>
-            <li>흐림·빛 반사가 없도록 해 주세요.</li>
-            <li>표마다 모양이 달라, 일부는 줄 글자로만 보일 수 있습니다.</li>
-          </ul>
-        </details>
+        <div class="list-action-panel">
+          <details class="home-more panel-lite">
+            <summary>사진찍기 가이드</summary>
+            <figure class="photo-guide-figure">
+              <img
+                class="photo-guide-sample"
+                src="./images/photo-guide-sample.jpg"
+                width="640"
+                height="960"
+                loading="lazy"
+                alt="촬영 예시: 정류장 시간표 전체가 화면에 들어오고 시각·글자가 크게 보이는 사진"
+              />
+              <figcaption>
+                예시: 시각표 부분만 크게. 아래 연락처·전화는 <strong>넣지 않습니다</strong>.
+              </figcaption>
+            </figure>
+            <ul class="home-more-list">
+              <li>시각·숫자가 휴대폰 화면에 <strong>크게</strong> 보이게 가까이 찍어 주세요.</li>
+              <li>흐림·빛 반사가 없도록 해 주세요.</li>
+              <li>표마다 모양이 달라, 일부는 줄 글자로만 보일 수 있습니다.</li>
+            </ul>
+          </details>
 
-        <div class="big-actions">
-          <button type="button" id="btn-new-camera" class="big-btn primary">
-            사진 찍어 등록
-          </button>
-          <button type="button" id="btn-new-album" class="big-btn secondary">
-            앨범에서 등록
-          </button>
+          <div class="big-actions list-actions">
+            <button type="button" id="btn-new-camera" class="big-btn primary">
+              사진 찍어 등록
+            </button>
+            <button type="button" id="btn-new-album" class="big-btn secondary">
+              앨범에서 등록
+            </button>
+            <button id="install-btn" type="button" class="big-btn secondary" hidden>
+              앱 설치하기
+            </button>
+          </div>
+          <p id="install-hint" class="install-hint"></p>
         </div>
       </section>
 
@@ -129,7 +135,7 @@
         </div>
       </section>
 
-      <main id="app" class="bus-main" aria-label="버스 시간표">
+      <main id="app" class="bus-main" aria-label="버스 시간표" hidden>
         <input
           id="file-camera"
           type="file"
@@ -141,17 +147,10 @@
 
         <p id="bus-status" class="bus-status" aria-live="polite" role="status"></p>
         <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
-      </main>
-
-      <div class="install-row">
-        <button id="install-btn" type="button" class="big-btn secondary" hidden>
-          앱 설치하기
-        </button>
         <button id="update-btn" type="button" class="big-btn ghost" hidden>
           새 버전 적용
         </button>
-        <p id="install-hint" class="hint install-hint"></p>
-      </div>
+      </main>
 
       <section class="tech-only" hidden aria-hidden="true">
         <span id="net-state"></span>

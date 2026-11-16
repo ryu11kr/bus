@@ -350,9 +350,20 @@ function saveBusState() {
   localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
 }
 
+function syncBusMainVisibility() {
+  const main = document.querySelector("#app");
+  const status = document.querySelector("#bus-status");
+  const bar = document.querySelector("#ocr-progress");
+  if (!main || !document.body.classList.contains("bus-app")) return;
+  const busy =
+    Boolean(status?.textContent?.trim()) || Boolean(bar && !bar.hidden);
+  main.hidden = !busy;
+}
+
 function setBusStatus(message) {
   const el = document.querySelector("#bus-status");
-  if (el) el.textContent = message;
+  if (el) el.textContent = message || "";
+  syncBusMainVisibility();
 }
 
 function setOcrProgress(show, value) {
@@ -361,11 +372,13 @@ function setOcrProgress(show, value) {
   bar.hidden = !show;
   if (!show) {
     bar.removeAttribute("value");
+    syncBusMainVisibility();
     return;
   }
   if (typeof value === "number") {
     bar.value = Math.round(value * 100);
   }
+  syncBusMainVisibility();
 }
 
 async function handleBusPhoto(input) {

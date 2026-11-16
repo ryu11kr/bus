@@ -932,23 +932,16 @@ function renderStopList() {
     btn.className = "stop-card";
     btn.dataset.stopId = stop.id;
 
-    const nameLabel = document.createElement("span");
-    nameLabel.className = "stop-card-label";
-    nameLabel.textContent = "정류장명";
-
     const name = document.createElement("span");
     name.className = "stop-card-name";
     name.textContent = stop.name;
 
-    const dateLabel = document.createElement("span");
-    dateLabel.className = "stop-card-label";
-    dateLabel.textContent = "등록날짜";
+    const date = document.createElement("span");
+    date.className = "stop-card-date";
+    date.textContent = formatStopDate(stop.updatedAt);
+    date.setAttribute("aria-label", `등록 ${formatStopDate(stop.updatedAt)}`);
 
-    const meta = document.createElement("span");
-    meta.className = "stop-card-meta";
-    meta.textContent = formatStopDate(stop.updatedAt);
-
-    btn.append(nameLabel, name, dateLabel, meta);
+    btn.append(name, date);
     btn.addEventListener("click", () => {
       activeStopId = stop.id;
       renderStopDetail(stop.id);

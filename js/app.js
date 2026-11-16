@@ -464,6 +464,15 @@ function bindPhotoViewer() {
     dialog.close();
   }
 
+  const blockNativeImageDrag = (e) => {
+    e.preventDefault();
+  };
+  dialog.addEventListener("dragstart", blockNativeImageDrag);
+  stage.addEventListener("dragstart", blockNativeImageDrag);
+  pan.addEventListener("dragstart", blockNativeImageDrag);
+  img.addEventListener("dragstart", blockNativeImageDrag);
+  dialog.addEventListener("selectstart", blockNativeImageDrag);
+
   btnExpand?.addEventListener("click", openPhotoViewer);
   btnClose?.addEventListener("click", closePhotoViewer);
   btnFit?.addEventListener("click", setZoomFit);
@@ -488,30 +497,39 @@ function bindPhotoViewer() {
     lastTap = now;
   });
 
-  stage.addEventListener("pointerdown", (e) => {
-    if (!dialog.open) return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (!canPanImage()) return;
-    panPointerId = e.pointerId;
-    panStartX = e.clientX;
-    panStartY = e.clientY;
-    panOriginTx = tx;
-    panOriginTy = ty;
-    panDidMove = false;
-    stage.setPointerCapture(e.pointerId);
-  });
+  stage.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!dialog.open) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (!canPanImage()) return;
+      e.preventDefault();
+      panPointerId = e.pointerId;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      panOriginTx = tx;
+      panOriginTy = ty;
+      panDidMove = false;
+      stage.setPointerCapture(e.pointerId);
+    },
+    { capture: true }
+  );
 
-  stage.addEventListener("pointermove", (e) => {
-    if (!dialog.open || panPointerId !== e.pointerId) return;
-    if (!canPanImage()) return;
-    const dx = e.clientX - panStartX;
-    const dy = e.clientY - panStartY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) panDidMove = true;
-    tx = panOriginTx + dx;
-    ty = panOriginTy + dy;
-    applyViewerTransform();
-    e.preventDefault();
-  });
+  stage.addEventListener(
+    "pointermove",
+    (e) => {
+      if (!dialog.open || panPointerId !== e.pointerId) return;
+      if (!canPanImage()) return;
+      const dx = e.clientX - panStartX;
+      const dy = e.clientY - panStartY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) panDidMove = true;
+      tx = panOriginTx + dx;
+      ty = panOriginTy + dy;
+      applyViewerTransform();
+      e.preventDefault();
+    },
+    { capture: true }
+  );
 
   const endPanPointer = (e) => {
     if (panPointerId !== e.pointerId) return;

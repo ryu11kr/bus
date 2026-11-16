@@ -1333,6 +1333,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   top: 0;
   transform-origin: 0 0;
   will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .photo-viewer-img {
@@ -1340,6 +1342,7 @@ body.bus-app button.detail-photo-hit:focus-visible {
   max-width: none;
   height: auto;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
 }

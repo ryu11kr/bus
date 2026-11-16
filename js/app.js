@@ -544,7 +544,6 @@ function getStopPreviewLine(stop) {
 function lineDisplayClass(line) {
   if (isLikelySectionTitle(line)) return "ocr-line--heading";
   if (/^\d{1,4}\s*번/.test(line) || /^노선\s*\d/.test(line)) return "ocr-line--route";
-  if (parseTimetableRowParts(line)) return "ocr-line--time-row";
   if (/\d{1,2}\s*[:：.．]\s*\d{2}/.test(line) || /^\d{4}$/.test(line.replace(/\s/g, ""))) {
     return "ocr-line--time";
   }
@@ -588,12 +587,20 @@ function parseTimetableRowParts(line) {
   return { timeDisplay, destination: rest || null };
 }
 
+/** 재산형(출발|종착 표)일 때만 2열 — `|` 또는 머리글이 있는 블록만 */
+function blockUsesTableLayout(lines) {
+  if (!lines?.length) return false;
+  if (lines.some(isTableColumnHeader)) return true;
+  return lines.filter((l) => /[\|｜]/.test(l)).length >= 2;
+}
+
 /**
  * @param {string} line
  * @param {number} blockIndex
  * @param {number} groupIndex
+ * @param {boolean} useTableLayout
  */
-function buildOcrLineElement(line, blockIndex, groupIndex) {
+function buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout) {
   const li = document.createElement("li");
   li.dataset.blockIndex = String(blockIndex);
   li.dataset.groupIndex = String(groupIndex);
@@ -604,14 +611,14 @@ function buildOcrLineElement(line, blockIndex, groupIndex) {
     return li;
   }
 
-  if (isTableColumnHeader(line)) {
+  if (useTableLayout && isTableColumnHeader(line)) {
     li.className = "ocr-line--colhead";
     li.innerHTML =
       '<span class="ocr-col-time">출발</span><span class="ocr-col-dest">종착지</span>';
     return li;
   }
 
-  const row = parseTimetableRowParts(line);
+  const row = useTableLayout ? parseTimetableRowParts(line) : null;
   const busMins = parseMinutesFromLine(line);
   if (row) {
     li.className = "ocr-line--time-row";
@@ -837,6 +844,7 @@ function renderStopDetail(stopId) {
       const isDirection = isDirectionBlockTitle(block.title);
       const isPlacard =
         Boolean(block.title) &&
+        isDirectionBlockTitle(block.title) === false &&
         !block.lines.some((l) => parseMinutesFromLine(l) != null);
       section.className = "ocr-block";
       if (isDirection) section.classList.add("ocr-block-direction");
@@ -852,16 +860,14 @@ function renderStopDetail(stopId) {
       let groupIndex = 0;
       let timesInGroup = false;
       let colheadDone = false;
-      const useTableLayout = block.lines.some(
-        (l) => parseTimetableRowParts(l) || isTableColumnHeader(l)
-      );
+      const useTableLayout = blockUsesTableLayout(block.lines);
       const ul = document.createElement("ul");
       ul.className = useTableLayout
         ? "ocr-block-lines ocr-block-lines--table"
         : "ocr-block-lines";
 
       for (const line of block.lines) {
-        if (isTableColumnHeader(line)) {
+        if (useTableLayout && isTableColumnHeader(line)) {
           if (colheadDone) continue;
           colheadDone = true;
         }
@@ -879,7 +885,7 @@ function renderStopDetail(stopId) {
           continue;
         }
 
-        const li = buildOcrLineElement(line, blockIndex, groupIndex);
+        const li = buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout);
         if (parseMinutesFromLine(line) != null) timesInGroup = true;
         ul.append(li);
       }

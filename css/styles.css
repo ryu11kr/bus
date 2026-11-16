@@ -522,7 +522,11 @@ footer {
   border-radius: 1rem;
 }
 
-.app-guide br {
+.resp-br {
+  display: none;
+}
+
+.app-guide .resp-br {
   display: none;
 }
 
@@ -531,9 +535,9 @@ footer {
     font-size: 1.05rem;
   }
 
-  .app-guide br {
+  .resp-br,
+  .app-guide .resp-br {
     display: block;
-    content: "";
     margin-top: 0.35rem;
   }
 }
@@ -1349,8 +1353,15 @@ body.bus-app button.detail-photo-hit:focus-visible {
   padding: 0.55rem 0.85rem max(0.85rem, env(safe-area-inset-bottom));
   font-size: 1rem;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.5;
   text-align: center;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: #cbd5e1;
   background: #141a22;
+}
+
+.photo-viewer-hint .resp-br {
+  display: block;
+  margin-top: 0.3rem;
 }

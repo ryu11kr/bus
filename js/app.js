@@ -671,13 +671,20 @@ async function handleBusPhoto(input) {
 
   setBusStatus(
     REGISTER_PHOTO_ONLY
-      ? "사진을 자동으로 최적화하는 중입니다. 잠시만 기다려 주세요."
+      ? "사진을 읽는 중입니다…"
       : "사진을 저장합니다. 잠시만 기다려 주세요."
   );
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
-    const thumb = await compressImageFile(file, PHOTO_MAX_WIDTH);
+    const thumb = await compressImageFile(file, PHOTO_MAX_WIDTH, (phase) => {
+      if (!REGISTER_PHOTO_ONLY) return;
+      if (phase === "enhance") {
+        setBusStatus("밝기·선명도를 자동 보정하는 중입니다…");
+      } else if (phase === "encode") {
+        setBusStatus("보정한 사진을 저장하는 중입니다…");
+      }
+    });
     let text = "";
     let sections = [];
     let ocrSource = "photo";
@@ -721,7 +728,11 @@ async function handleBusPhoto(input) {
       openStopNameDialog("");
     }
 
-    setBusStatus("정류장 이름을 적어 주세요.");
+    setBusStatus(
+      REGISTER_PHOTO_ONLY
+        ? "보정을 마쳤습니다. 정류장 이름을 적어 주세요."
+        : "정류장 이름을 적어 주세요."
+    );
   } catch (error) {
     console.error(error);
     setBusStatus("사진 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.");
@@ -1446,7 +1457,12 @@ function isLikelySectionTitle(line) {
  * @param {File} file
  * @param {number} maxWidth
  */
-async function compressImageFile(file, maxWidth) {
+/**
+ * @param {File} file
+ * @param {number} maxWidth
+ * @param {(phase: "enhance" | "encode") => void} [progress]
+ */
+async function compressImageFile(file, maxWidth, progress) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxWidth / bitmap.width);
   const w = Math.round(bitmap.width * scale);
@@ -1460,14 +1476,23 @@ async function compressImageFile(file, maxWidth) {
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, 0, 0, w, h);
   if (REGISTER_PHOTO_ONLY) {
-    autoOptimizePhotoOnCanvas(ctx, w, h);
+    progress?.("enhance");
+    await autoOptimizePhotoOnCanvas(ctx, w, h);
   }
+  progress?.("encode");
+  await yieldToUi();
   return canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+}
+
+function yieldToUi() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
 }
 
 /** 밝기에 맞춰 대비·선명도 자동 조절 (사용자 설정 없음) */
 /** @param {CanvasRenderingContext2D} ctx */
-function autoOptimizePhotoOnCanvas(ctx, width, height) {
+async function autoOptimizePhotoOnCanvas(ctx, width, height) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const px = imageData.data;
   let lumSum = 0;
@@ -1477,25 +1502,34 @@ function autoOptimizePhotoOnCanvas(ctx, width, height) {
     samples += 1;
   }
   const meanLum = samples ? lumSum / samples : 128;
-  let contrast = 1.12;
-  let brightness = 6;
-  let sharpen = 0.42;
+  let contrast = 1.16;
+  let brightness = 8;
+  let sharpen = 0.48;
+  let gamma = 1;
   if (meanLum < 95) {
-    contrast = 1.2;
-    brightness = 16;
-    sharpen = 0.38;
+    contrast = 1.24;
+    brightness = 18;
+    sharpen = 0.44;
+    gamma = 0.88;
   } else if (meanLum > 175) {
-    contrast = 1.08;
-    brightness = -2;
-    sharpen = 0.35;
+    contrast = 1.1;
+    brightness = -4;
+    sharpen = 0.38;
+    gamma = 1.05;
   }
+
+  const step = Math.max(65536, Math.floor(px.length / 8));
   for (let i = 0; i < px.length; i += 4) {
     for (let c = 0; c < 3; c++) {
-      let v = (px[i + c] - 128) * contrast + 128 + brightness;
+      let v = px[i + c] / 255;
+      if (gamma !== 1) v = Math.pow(v, gamma);
+      v = (v * 255 - 128) * contrast + 128 + brightness;
       px[i + c] = v < 0 ? 0 : v > 255 ? 255 : v;
     }
+    if (i > 0 && i % step === 0) await yieldToUi();
   }
-  sharpenRgbInPlace(px, width, height, sharpen);
+
+  await sharpenRgbInPlaceAsync(px, width, height, sharpen);
   ctx.putImageData(imageData, 0, 0);
 }
 
@@ -1505,9 +1539,10 @@ function autoOptimizePhotoOnCanvas(ctx, width, height) {
  * @param {number} height
  * @param {number} strength
  */
-function sharpenRgbInPlace(pixels, width, height, strength) {
+async function sharpenRgbInPlaceAsync(pixels, width, height, strength) {
   const src = new Uint8ClampedArray(pixels);
   const row = width * 4;
+  const yStep = Math.max(8, Math.floor(height / 12));
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const i = y * row + x * 4;
@@ -1519,6 +1554,7 @@ function sharpenRgbInPlace(pixels, width, height, strength) {
         pixels[i + c] = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
       }
     }
+    if (y > 1 && y % yStep === 0) await yieldToUi();
   }
 }
 

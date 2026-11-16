@@ -637,12 +637,20 @@ footer {
   border-color: #fca5a5;
 }
 
+.detail-status-chrome {
+  margin: 1.25rem 0 0;
+}
+
 .bus-status {
   min-height: 1.5em;
   margin: 1rem 0 0;
   font-size: 1.2rem;
   font-weight: 600;
   text-align: center;
+}
+
+.detail-status-chrome .bus-status {
+  margin-top: 0;
 }
 
 .bus-status:empty {

@@ -81,6 +81,14 @@
             </button>
           </div>
           <p id="install-hint" class="install-hint"></p>
+          <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
+          <progress
+            id="ocr-progress-list"
+            class="ocr-progress"
+            value="0"
+            max="100"
+            hidden
+          ></progress>
         </div>
       </section>
 
@@ -97,6 +105,11 @@
             글자가 비어 있습니다. 아래 「사진 다시 찍기」로 깨끗하게 다시
             찍어 주세요.
           </p>
+        </div>
+
+        <div class="detail-status-chrome" aria-live="polite">
+          <p id="bus-status" class="bus-status" role="status"></p>
+          <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
         </div>
 
         <details class="original-photo panel-lite">
@@ -142,8 +155,6 @@
         />
         <input id="file-album" type="file" accept="image/*" hidden />
 
-        <p id="bus-status" class="bus-status" aria-live="polite" role="status"></p>
-        <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
         <button id="update-btn" type="button" class="big-btn ghost" hidden>
           새 버전 적용
         </button>

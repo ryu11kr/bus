@@ -352,32 +352,25 @@ function saveBusState() {
 
 function syncBusMainVisibility() {
   const main = document.querySelector("#app");
-  const status = document.querySelector("#bus-status");
-  const bar = document.querySelector("#ocr-progress");
   if (!main || !document.body.classList.contains("bus-app")) return;
-  const busy =
-    Boolean(status?.textContent?.trim()) || Boolean(bar && !bar.hidden);
-  main.hidden = !busy;
+  main.hidden = true;
 }
 
 function setBusStatus(message) {
-  const el = document.querySelector("#bus-status");
-  if (el) el.textContent = message || "";
+  const text = message || "";
+  document.querySelectorAll(".bus-status").forEach((el) => {
+    el.textContent = text;
+  });
   syncBusMainVisibility();
 }
 
 function setOcrProgress(show, value) {
-  const bar = document.querySelector("#ocr-progress");
-  if (!bar) return;
-  bar.hidden = !show;
-  if (!show) {
-    bar.removeAttribute("value");
-    syncBusMainVisibility();
-    return;
-  }
-  if (typeof value === "number") {
-    bar.value = Math.round(value * 100);
-  }
+  const bars = document.querySelectorAll(".ocr-progress");
+  bars.forEach((bar) => {
+    bar.hidden = !show;
+    if (!show) bar.removeAttribute("value");
+    else if (typeof value === "number") bar.value = Math.round(value * 100);
+  });
   syncBusMainVisibility();
 }
 
@@ -906,13 +899,14 @@ function computeNextBusByGroup(sections, now = new Date()) {
 }
 
 function formatNextBusBadge(pick) {
-  if (pick.isTomorrow) return "가장 가까운 차 · 내일 첫 차";
-  if (pick.diffMins <= 0) return "가장 가까운 차 · 곧 출발";
-  if (pick.diffMins < 60) return `가장 가까운 차 · 약 ${pick.diffMins}분 후`;
+  const label = "지금 기준 다음 출발버스";
+  if (pick.isTomorrow) return `${label} · 내일 첫 차`;
+  if (pick.diffMins <= 0) return `${label} · 곧 출발`;
+  if (pick.diffMins < 60) return `${label} · 약 ${pick.diffMins}분 후`;
   const h = Math.floor(pick.diffMins / 60);
   const m = pick.diffMins % 60;
-  if (m === 0) return `가장 가까운 차 · 약 ${h}시간 후`;
-  return `가장 가까운 차 · 약 ${h}시간 ${m}분 후`;
+  if (m === 0) return `${label} · 약 ${h}시간 후`;
+  return `${label} · 약 ${h}시간 ${m}분 후`;
 }
 
 function clearNextBusHighlights() {

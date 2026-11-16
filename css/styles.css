@@ -525,6 +525,28 @@ footer {
   margin-top: 0.45rem;
 }
 
+.photo-guide-figure {
+  margin: 0.75rem 0 0;
+}
+
+.photo-guide-sample {
+  display: block;
+  width: 100%;
+  max-width: 18rem;
+  margin: 0 auto;
+  border-radius: 0.75rem;
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.photo-guide-figure figcaption {
+  margin: 0.55rem 0 0;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--muted);
+}
+
 .next-bus-card {
   margin-bottom: 1.25rem;
   padding: 1.35rem 1rem;

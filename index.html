@@ -24,7 +24,10 @@
   <body class="bus-app">
     <div id="app-update-banner" class="app-update-banner" hidden role="alert" aria-live="assertive">
       <p class="app-update-banner-text">새 버전이 나왔어요</p>
-      <p class="app-update-banner-sub">업데이트를 누르면 최신 화면으로 바뀝니다.</p>
+      <p class="app-update-banner-sub">
+        업데이트를 누르면 최신 화면으로 바뀝니다. 안 바뀌면 아래 「업데이트·새로고침」을
+        보세요.
+      </p>
       <button type="button" id="app-update-apply" class="big-btn primary">
         업데이트
       </button>
@@ -54,7 +57,7 @@
         <ul id="stop-list" class="stop-list"></ul>
 
         <div class="list-action-panel">
-          <details class="home-more panel-lite">
+          <details id="photo-guide-details" class="home-more panel-lite">
             <summary>사진찍기 가이드</summary>
             <figure class="photo-guide-figure">
               <img
@@ -86,6 +89,18 @@
               앱 설치하기
             </button>
           </div>
+          <details id="mobile-refresh-help" class="home-more panel-lite mobile-refresh-help">
+            <summary>업데이트·새로고침 (휴대폰)</summary>
+            <ol class="home-more-list home-more-list--ordered">
+              <li>위에 <strong>「새 버전이 나왔어요」</strong>가 보이면 <strong>업데이트</strong>를 누르세요.</li>
+              <li>없으면 앱을 <strong>완전히 끈 뒤</strong>(최근 앱 목록에서 밀어 종료) 다시 여세요.</li>
+              <li>그래도 예전 화면이면:
+                <strong>삼성 인터넷</strong> ⋮ → 설정 → 인터넷 사용 기록 삭제 → <strong>캐시</strong>만 삭제.
+                <strong>크롬</strong> 주소 옆 ⓘ → 사이트 설정 → <strong>데이터 삭제</strong>.
+              </li>
+              <li><strong>홈 화면 아이콘</strong>으로 쓰는 경우, 아이콘을 지우고 브라우저에서 다시 <strong>앱 설치</strong>할 수도 있습니다.</li>
+            </ol>
+          </details>
           <p id="install-hint" class="install-hint"></p>
           <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
         </div>

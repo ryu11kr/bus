@@ -89,8 +89,11 @@ function bindAppUpdateUi() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkAppVersionUpdate().catch(() => {});
+    } else {
+      collapseListPanelDetails();
     }
   });
+  window.addEventListener("pagehide", collapseListPanelDetails);
 }
 
 async function fetchAppVersionMeta() {
@@ -793,12 +796,19 @@ function getActiveStop() {
   return busStops.find((s) => s.id === activeStopId) || null;
 }
 
+function collapseListPanelDetails() {
+  document.querySelectorAll("#view-list details[open]").forEach((el) => {
+    el.open = false;
+  });
+}
+
 function showListView() {
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
 }
 
 function showDetailView() {
+  collapseListPanelDetails();
   document.querySelector("#view-list")?.setAttribute("hidden", "");
   document.querySelector("#view-detail")?.removeAttribute("hidden");
 }

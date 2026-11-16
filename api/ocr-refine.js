@@ -3,7 +3,7 @@
  *
  * 환경 변수 (Vercel → Settings → Environment Variables):
  *   GEMINI_API_KEY       — Google AI Studio API 키 (필수)
- *   GEMINI_MODEL         — 기본 gemini-2.5-flash-lite (무료 RPD 높은 편)
+ *   GEMINI_MODEL         — 기본 gemini-3.5-flash-lite (신규 API 키용)
  *   APP_DAILY_AI_LIMIT   — 이 앱에서 허용할 일일 정밀 읽기 횟수 (기본 50)
  *   KV_REST_API_URL      — (선택) Vercel KV / Upstash — 일일 카운트 정확 추적
  *   KV_REST_API_TOKEN
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     return res.status(204).end();
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
   const appLimit = Math.max(1, Number(process.env.APP_DAILY_AI_LIMIT) || 50);
 
   if (req.method === "GET") {

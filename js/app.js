@@ -311,7 +311,11 @@ function setOcrProgress(show, value) {
   const bar = document.querySelector("#ocr-progress");
   if (!bar) return;
   bar.hidden = !show;
-  if (show && typeof value === "number") {
+  if (!show) {
+    bar.removeAttribute("value");
+    return;
+  }
+  if (typeof value === "number") {
     bar.value = Math.round(value * 100);
   }
 }
@@ -795,7 +799,11 @@ async function refineTimetableWithAi(dataUrl) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const msg = payload?.error || `정밀 읽기 실패 (${response.status})`;
+      let msg = payload?.error || `정밀 읽기 실패 (${response.status})`;
+      if (/no longer available|models\/gemini/i.test(msg)) {
+        msg =
+          "인공지능 모델이 갱신되었습니다. 앱을 새로고침하고 다시 시도해 주세요. 계속되면 잠시 뒤 다시 배포된 버전으로 시도하세요.";
+      }
       setBusStatus(msg);
       refreshAiQuotaUi().catch(() => {});
       return null;
@@ -828,16 +836,20 @@ async function runAiRefineForStop(stopId) {
 
   setBusStatus("인공지능이 시간표를 읽고 있습니다…");
   setOcrProgress(true, 0.2);
-  const ai = await refineTimetableWithAi(stop.photoThumb);
-  if (!ai?.text) return;
+  try {
+    const ai = await refineTimetableWithAi(stop.photoThumb);
+    if (!ai?.text) return;
 
-  stop.ocrText = ai.text.trim();
-  stop.sections = organizeOcrText(stop.ocrText);
-  stop.updatedAt = new Date().toISOString();
-  saveBusState();
-  renderStopDetail(stop.id);
-  renderStopList();
-  setBusStatus("인공지능으로 다시 읽었습니다.");
+    stop.ocrText = ai.text.trim();
+    stop.sections = organizeOcrText(stop.ocrText);
+    stop.updatedAt = new Date().toISOString();
+    saveBusState();
+    renderStopDetail(stop.id);
+    renderStopList();
+    setBusStatus("인공지능으로 다시 읽었습니다.");
+  } finally {
+    setOcrProgress(false);
+  }
 }
 
 function startLiveClock() {

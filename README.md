@@ -18,11 +18,11 @@
 
 ### 1) Google이 정한 무료 한도 (API)
 
-- **모델마다 다름.** 예: `gemini-2.5-flash-lite` 는 무료 티어에서 **하루 수백 회(RPD)** 급인 경우가 많고, 일반 **Flash(이미지 품질 높음)** 는 **하루 20~250회**처럼 훨씬 적을 수 있습니다.
+- **모델마다 다름.** 예: `gemini-3.5-flash-lite` 는 무료 티어에서 **하루 수백 회(RPD)** 급인 경우가 많고, 일반 **Flash(이미지 품질 높음)** 는 **하루 20~250회**처럼 훨씬 적을 수 있습니다.
 - **프로젝트(API 키 발급한 Google Cloud 프로젝트) 기준**이며, 자정 **미국 서부(태평양)** 에 리셋되는 경우가 많습니다.
 - Google이 수치를 자주 바꿉니다. **본인 한도는 [Google AI Studio](https://aistudio.google.com/) → Rate limits** 에서 확인하세요.
 
-이 앱 기본 모델: **`gemini-2.5-flash-lite`** (무료 RPD를 아끼기 좋은 편).  
+이 앱 기본 모델: **`gemini-3.5-flash-lite`**.  
 Vercel 환경 변수 `GEMINI_MODEL` 로 변경 가능.
 
 ### 2) 이 앱이 정한 일일 한도 (개발자 보호)
@@ -38,7 +38,7 @@ KV(`KV_REST_API_URL` / `KV_REST_API_TOKEN`)를 Vercel에 연결하면 카운트�
 1. `bus` 저장소를 Vercel에 연결
 2. Environment Variables:
    - **`GEMINI_API_KEY`** — [Google AI Studio](https://aistudio.google.com/apikey) 에서 발급 (무료 티어)
-   - **`GEMINI_MODEL`** — 선택 (기본 `gemini-2.5-flash-lite`)
+   - **`GEMINI_MODEL`** — 선택 (기본 `gemini-3.5-flash-lite`. 예전 `gemini-2.5-*` 는 신규 키에서 불가)
    - **`APP_DAILY_AI_LIMIT`** — 선택 (기본 `50`)
    - **`KV_REST_API_URL` / `KV_REST_API_TOKEN`** — 선택 (일일 카운트 정확화)
 3. 배포 후 앱이 `/api/ocr-refine` 호출

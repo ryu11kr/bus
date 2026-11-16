@@ -11,16 +11,26 @@
 
 import { checkAndIncrementDailyQuota, getDailyQuotaStatus } from "./_daily-quota.js";
 
-const PROMPT = `당신은 시골 버스 정류장 시간표 사진을 옮기는 도우미입니다.
-이미지에 보이는 글자만 한국어로 옮기세요. 추측·설명·해설은 금지.
+const PROMPT = `당신은 시골 버스 정류장 시간표 사진을 구조화하는 도우미입니다.
+이미지에 보이는 글자만 사용하세요. 추측·설명은 금지.
 
-출력 형식(반드시 지키세요):
-- 표 전체 제목이 있으면 첫 줄: # 제목 (# 뒤에 한 칸 띄우기)
-- 구간·방향마다: ## 제목 (# 없이 보이는 머리글 그대로, 예: ## 봉화 방면)
-- 한 줄에 시각 하나 + 종착지·행선이 있으면: HH:MM | 종착지 (24시간제, 종착지는 사진 그대로)
-- 좌우 2열 시간표: ## 블록을 반드시 두 개. 왼쪽 열 제목·시각만 첫 ##, 오른쪽만 둘째 ## (두 열 시각을 한 블록에 섞지 마세요)
-- 한 ## 안에 / 로 두 제목을 붙이지 마세요
-- 전화번호, 연락처, 광고, 웹주소는 넣지 마세요`;
+반드시 JSON 하나만 출력하세요(마크다운·코드블록 없음).
+
+{
+  "placard": "표 맨 위 제목이 있으면 문자열, 없으면 null",
+  "sections": [
+    {
+      "title": "구간 제목(방면·노선·→ 표기 그대로) 또는 null",
+      "lines": ["각 줄 하나씩"]
+    }
+  ]
+}
+
+lines 규칙:
+- 24시간제 HH:MM (예: 13:30)
+- 시각마다 종착지가 다르면 "HH:MM | 종착지"
+- 좌우 2열 표면 sections를 열마다 하나: 왼쪽 열 제목+시각만, 오른쪽 열 제목+시각만 (한 section에 두 열 섞지 마세요)
+- 전화·연락처·광고·웹주소 줄은 넣지 마세요`;
 
 function resolveAppDailyLimit() {
   const raw = process.env.APP_DAILY_AI_LIMIT;
@@ -52,7 +62,8 @@ async function callGeminiVision(apiKey, model, mimeType, base64Data) {
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json",
       },
     }),
   });
@@ -72,6 +83,17 @@ async function callGeminiVision(apiKey, model, mimeType, base64Data) {
   if (!text) {
     return { ok: false, status: 502, error: "인공지능이 글자를 돌려주지 않았습니다." };
   }
+
+  try {
+    JSON.parse(text);
+  } catch {
+    return {
+      ok: false,
+      status: 502,
+      error: "인공지능 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.",
+    };
+  }
+
   return { ok: true, text };
 }
 
@@ -101,7 +123,7 @@ export default async function handler(req, res) {
         deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
       },
       googleFreeTierNote:
-        "Google 무료 한도는 모델·프로젝트마다 다릅니다. Flash-Lite는 보통 하루 수밝 회급, 일반 Flash는 더 적습니다. AI Studio에서 본인 한도를 확인하세요.",
+        "Google 무료 한도는 모델·프로젝트마다 다릅니다. Flash-Lite는 보통 하루 수백 회급, 일반 Flash는 더 적습니다. AI Studio에서 본인 한도를 확인하세요.",
     });
   }
 

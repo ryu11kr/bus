@@ -693,7 +693,75 @@ function formatStopDate(iso) {
 function buildSectionsFromOcr(text) {
   const dual = tryReorganizeDualDirectionBoard(text);
   if (dual) return dual;
+  const interleaved = tryReorganizeInterleavedBoard(text);
+  if (interleaved) return interleaved;
   return organizeOcrText(text);
+}
+
+/** AI/OCR이 한 줄에 시각 하나씩 번갈아 나열할 때(필덕입구 표) 장수·산서로 나눔. */
+function tryReorganizeInterleavedBoard(text) {
+  if (!/장수\s*방면|산서\s*방면|방면/.test(text)) return null;
+
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  let placard = null;
+  const timeLines = [];
+
+  for (const line of rawLines) {
+    if (isJunkTimetableHeaderLine(line)) continue;
+    if (/^[가-힣]{2,10}입구$/.test(line) && !/\d{1,2}:\d{2}/.test(line)) {
+      placard = line;
+      continue;
+    }
+    if (/\d{1,2}:\d{2}/.test(line)) {
+      const parts = splitLineIntoDirectionTimes(line);
+      if (parts) {
+        if (parts[0]) timeLines.push({ side: "left", text: parts[0] });
+        if (parts[1]) timeLines.push({ side: "right", text: parts[1] });
+      } else {
+        timeLines.push({ side: "auto", text: line });
+      }
+    }
+  }
+
+  if (timeLines.length < 4) return null;
+
+  const left = [];
+  const right = [];
+  for (const entry of timeLines) {
+    if (entry.side === "left") left.push(entry.text);
+    else if (entry.side === "right") right.push(entry.text);
+    else if (entry.side === "auto") {
+      if (left.length <= right.length) left.push(entry.text);
+      else right.push(entry.text);
+    }
+  }
+
+  if (left.length < 2 || right.length < 2) return null;
+
+  const sections = [];
+  if (placard) sections.push({ title: placard, lines: [] });
+  sections.push({ title: "장수 방면", lines: left });
+  sections.push({ title: "산서 방면", lines: right });
+  return sections;
+}
+
+function isJunkTimetableHeaderLine(line) {
+  if (/^장수군$|^장수말|장수버스|식천\s*www/i.test(line)) return true;
+  if (/^장수\s*방면$|^산서\s*방면$/.test(line)) return true;
+  if (/^장수\s*방면\s*산서\s*방면/.test(line)) return true;
+  if (/^=\s*가$|^[=\-|]{1,3}$/.test(line)) return true;
+  return false;
+}
+
+function splitLineIntoDirectionTimes(line) {
+  const times = [...line.matchAll(/\d{1,2}:\d{2}/g)];
+  if (times.length < 2) return null;
+  const splitAt = times[1].index ?? line.length;
+  return [line.slice(0, splitAt).trim(), line.slice(splitAt).trim()];
 }
 
 function tryReorganizeDualDirectionBoard(text) {

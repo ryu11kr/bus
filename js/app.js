@@ -1473,7 +1473,7 @@ function bindInstall() {
     deferredPrompt = event;
     installBtn.hidden = false;
     installBtn.disabled = false;
-    installHint.textContent = "설치하면 홈 화면 아이콘으로 단독 창에서 열립니다.";
+    installHint.textContent = "앱 설치하기를 누르면 홈 화면 아이콘으로 열 수 있습니다.";
   });
 
   installBtn.addEventListener("click", async () => {
@@ -1488,7 +1488,7 @@ function bindInstall() {
   });
 
   window.addEventListener("appinstalled", () => {
-    installHint.textContent = "설치가 완료되었습니다. 홈 화면에서 열어 보세요.";
+    installHint.textContent = "설치가 완료되었습니다. 홈 화면 아이콘에서 열어 보세요.";
     renderDisplayMode();
   });
 }

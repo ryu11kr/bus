@@ -891,7 +891,15 @@ footer {
   cursor: pointer;
 }
 
+.stop-card-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0369a1;
+}
+
 .stop-card-name {
+  margin-top: 0.1rem;
   font-size: 1.45rem;
   font-weight: 800;
 }
@@ -904,9 +912,23 @@ footer {
 }
 
 .stop-card-meta {
-  font-size: 1.05rem;
-  font-weight: 600;
+  margin-top: 0.1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
   color: #000;
+}
+
+.list-actions .install-btn {
+  margin-top: 0.15rem;
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  color: #fff;
+  border: 3px solid #0369a1;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+}
+
+.list-actions .install-btn:focus-visible {
+  outline: 3px solid #7dd3fc;
+  outline-offset: 2px;
 }
 
 .back-btn {

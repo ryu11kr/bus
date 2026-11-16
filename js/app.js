@@ -649,6 +649,86 @@ function isTableColumnHeader(line) {
   );
 }
 
+/** 표 칸 라벨만 있는 줄 — 정류장 이름과 무관한 공통 필터 */
+function isTableLabelNoiseLine(line) {
+  const t = String(line).trim();
+  const c = t.replace(/\s+/g, "");
+  if (
+    /^(출발)?시간$|^출발시간$|^목적지$|^종착지$|^경유지$|^행선지?$|^시각$|^출발$|^도착$/.test(
+      c
+    )
+  ) {
+    return true;
+  }
+  if (/^출발\s*시간$/i.test(t) && !/\d{1,2}\s*[:：]/.test(t)) return true;
+  return isTableColumnHeader(line);
+}
+
+function polishTranscriptLines(rawLines) {
+  const out = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    let line = rawLines[i];
+    if (isTableLabelNoiseLine(line)) continue;
+
+    const next = rawLines[i + 1];
+    const nextIsDest =
+      next &&
+      !isTableLabelNoiseLine(next) &&
+      !isDirectionHeadingLine(next) &&
+      !isLikelySectionTitle(next) &&
+      countTimeTokens(next) === 0 &&
+      /^[가-힣0-9·/\-]{1,24}$/.test(next.trim());
+
+    if (
+      countTimeTokens(line) === 1 &&
+      !lineHasTimeAndDestination(line) &&
+      nextIsDest
+    ) {
+      line = `${normalizeScheduleRow(line)} | ${next.trim()}`;
+      i++;
+    } else if (lineLooksLikeTimeValue(line)) {
+      line = normalizeScheduleRow(line);
+    }
+
+    out.push(line);
+  }
+  return out;
+}
+
+function sectionsFromTranscriptLines(rawLines) {
+  const lines = polishTranscriptLines(rawLines);
+  if (!lines.length) return [];
+
+  /** @type {{ title: string | null, lines: string[] }[]} */
+  const sections = [];
+  let current = { title: null, lines: [] };
+
+  const flush = () => {
+    if (!current.title && !current.lines.length) return;
+    sections.push({ title: current.title, lines: [...current.lines] });
+    current = { title: null, lines: [] };
+  };
+
+  for (const line of lines) {
+    if (isDirectionHeadingLine(line)) {
+      flush();
+      current.title = formatDirectionTitle(line);
+      continue;
+    }
+    if (isLikelySectionTitle(line) && !lineLooksLikeTimeValue(line)) {
+      flush();
+      current.title =
+        isDirectionBlockTitle(line) ? formatDirectionTitle(line) : line;
+      continue;
+    }
+    current.lines.push(line);
+  }
+  flush();
+
+  if (!sections.length) return [{ title: null, lines }];
+  return stripPrivacyFromSections(sections);
+}
+
 function isContactMetaLine(line) {
   const t = String(line).trim();
   if (!t) return false;
@@ -1161,17 +1241,13 @@ function buildSectionsFromOcr(text) {
   const fromJson = parseAiTimetableJson(trimmed);
   if (fromJson?.length) return fromJson;
 
-  const lines = trimmed
+  const rawLines = trimmed
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .filter((l) => !isContactMetaLine(l))
-    .map((l) =>
-      lineLooksLikeTimeValue(l) ? normalizeScheduleRow(l) : l
-    );
+    .filter((l) => !isContactMetaLine(l));
 
-  if (!lines.length) return [];
-  return [{ title: null, lines }];
+  return sectionsFromTranscriptLines(rawLines);
 }
 
 function isLikelySectionTitle(line) {

@@ -5,9 +5,15 @@
 import { checkAndIncrementDailyQuota, getDailyQuotaStatus } from "./_daily-quota.js";
 
 const PROMPT = `시골 버스 정류장 시간표 사진입니다.
-보이는 글자만 한국어로, 읽는 순서대로 한 줄에 하나씩 옮기세요.
-설명·해석·표 재배열은 하지 마세요. 빈 줄은 넣지 마세요.
-전화번호, 연락처, 광고, 웹주소 줄은 빼세요.`;
+보이는 글자만 한국어로 옮기세요. 설명·해석은 금지.
+
+규칙:
+- 표 칸 머리글(출발시간, 목적지, 경유지, 종착지, 행선 등)은 쓰지 마세요.
+- "○○ 방면", 노선명 같은 구간 제목은 한 줄로.
+- 시각과 목적지가 한 칸이면: HH:MM | 목적지 (24시간제)
+- 시각만 있는 칸은 HH:MM 한 줄
+- 방면(블록)마다 위에서 아래로 읽은 순서 유지
+- 전화·연락처·광고·웹주소는 빼세요`;
 
 function resolveAppDailyLimit() {
   const raw = process.env.APP_DAILY_AI_LIMIT;

@@ -89,8 +89,14 @@ export default async function handler(req, res) {
       model,
       appDailyLimit: appLimit,
       quota,
+      deploy: {
+        commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+        commitMessage: process.env.VERCEL_GIT_COMMIT_MESSAGE || null,
+        ref: process.env.VERCEL_GIT_COMMIT_REF || null,
+        deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+      },
       googleFreeTierNote:
-        "Google 무료 한도는 모델·프로젝트마다 다릅니다. Flash-Lite는 보통 하루 수백 회급, 일반 Flash는 더 적습니다. AI Studio에서 본인 한도를 확인하세요.",
+        "Google 무료 한도는 모델·프로젝트마다 다릅니다. Flash-Lite는 보통 하루 수밝 회급, 일반 Flash는 더 적습니다. AI Studio에서 본인 한도를 확인하세요.",
     });
   }
 

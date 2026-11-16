@@ -58,7 +58,6 @@ let pendingStopDraft = null;
 let pendingStopAction = null;
 /** @type {string | null} */
 let replaceStopId = null;
-let clockTimerId = null;
 /** 사진 처리 중 — 자동 업데이트 새로고침 방지 */
 let photoPipelineBusy = false;
 
@@ -71,7 +70,6 @@ function initApp() {
   bindPhotoViewer();
   bindSamsungPinchGuard();
   bindAppUpdateUi();
-  startLiveClock();
   showListView();
   renderStopList();
 }
@@ -1878,40 +1876,6 @@ async function refineTimetableWithAi(dataUrl) {
   } finally {
     setOcrProgress(false);
   }
-}
-
-function startLiveClock() {
-  const tick = () => {
-    const now = new Date();
-    const clock = document.querySelector("#now-clock");
-    const clockKo = document.querySelector("#now-clock-ko");
-    if (clock) {
-      clock.textContent = formatClockDigital(now);
-    }
-    if (clockKo) {
-      clockKo.textContent = formatTimeKorean(now.getHours(), now.getMinutes())
-        + ` ${now.getSeconds().toString().padStart(2, "0")}초`;
-    }
-    if (now.getSeconds() === 0) {
-      refreshActiveStopNextBus();
-    }
-  };
-  tick();
-  if (clockTimerId) window.clearInterval(clockTimerId);
-  clockTimerId = window.setInterval(tick, 1000);
-}
-
-function formatClockDigital(date) {
-  const h = date.getHours().toString().padStart(2, "0");
-  const m = date.getMinutes().toString().padStart(2, "0");
-  const s = date.getSeconds().toString().padStart(2, "0");
-  return `${h}:${m}:${s}`;
-}
-
-function formatTimeKorean(hour, minute) {
-  const ampm = hour < 12 ? "오전" : "오후";
-  const h12 = hour % 12 || 12;
-  return `${ampm} ${h12}시 ${minute.toString().padStart(2, "0")}분`;
 }
 
 async function loadConfig() {

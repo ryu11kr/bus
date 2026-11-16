@@ -1319,6 +1319,14 @@ body.bus-app button.detail-photo-hit:focus-visible {
   background: #0a0a0a;
 }
 
+.photo-viewer-stage--pan {
+  cursor: grab;
+}
+
+.photo-viewer-stage--pan:active {
+  cursor: grabbing;
+}
+
 .photo-viewer-pan {
   position: absolute;
   left: 0;

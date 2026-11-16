@@ -358,6 +358,7 @@ function bindPhotoViewer() {
   let panStartY = 0;
   let panOriginTx = 0;
   let panOriginTy = 0;
+  let panDidMove = false;
 
   function stageMetrics() {
     return { w: stage.clientWidth, h: stage.clientHeight };
@@ -404,11 +405,23 @@ function bindPhotoViewer() {
     tx = (w - iw * s) / 2;
     ty = (h - ih * s) / 2;
     applyViewerTransform();
+    stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
   }
 
   function zoomInStep() {
     userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.35);
     applyViewerTransform();
+    if (userZoom > 1.01) stage.classList.add("photo-viewer-stage--pan");
+    else stage.classList.remove("photo-viewer-stage--pan");
+  }
+
+  function canPanImage() {
+    if (userZoom > 1.01) return true;
+    const { w, h } = stageMetrics();
+    const s = totalScale();
+    const dw = img.naturalWidth * s;
+    const dh = img.naturalHeight * s;
+    return dw > w + 2 || dh > h + 2;
   }
 
   function touchDistance(touches) {
@@ -465,6 +478,7 @@ function bindPhotoViewer() {
 
   let lastTap = 0;
   stage.addEventListener("click", (e) => {
+    if (panDidMove) return;
     if (e.target !== stage && e.target !== pan && e.target !== img) return;
     const now = Date.now();
     if (now - lastTap < 320) {
@@ -474,6 +488,45 @@ function bindPhotoViewer() {
     lastTap = now;
   });
 
+  stage.addEventListener("pointerdown", (e) => {
+    if (!dialog.open) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!canPanImage()) return;
+    panPointerId = e.pointerId;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panOriginTx = tx;
+    panOriginTy = ty;
+    panDidMove = false;
+    stage.setPointerCapture(e.pointerId);
+  });
+
+  stage.addEventListener("pointermove", (e) => {
+    if (!dialog.open || panPointerId !== e.pointerId) return;
+    if (!canPanImage()) return;
+    const dx = e.clientX - panStartX;
+    const dy = e.clientY - panStartY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) panDidMove = true;
+    tx = panOriginTx + dx;
+    ty = panOriginTy + dy;
+    applyViewerTransform();
+    e.preventDefault();
+  });
+
+  const endPanPointer = (e) => {
+    if (panPointerId !== e.pointerId) return;
+    panPointerId = null;
+    try {
+      stage.releasePointerCapture(e.pointerId);
+    } catch {
+    }
+    window.setTimeout(() => {
+      panDidMove = false;
+    }, 0);
+  };
+  stage.addEventListener("pointerup", endPanPointer);
+  stage.addEventListener("pointercancel", endPanPointer);
+
   stage.addEventListener(
     "touchstart",
     (e) => {
@@ -482,12 +535,6 @@ function bindPhotoViewer() {
         pinchStartDist = touchDistance(e.touches);
         pinchStartZoom = userZoom;
         panPointerId = null;
-      } else if (e.touches.length === 1) {
-        panPointerId = e.touches[0].identifier;
-        panStartX = e.touches[0].clientX;
-        panStartY = e.touches[0].clientY;
-        panOriginTx = tx;
-        panOriginTy = ty;
       }
     },
     { passive: true }
@@ -497,28 +544,21 @@ function bindPhotoViewer() {
     "touchmove",
     (e) => {
       if (!dialog.open) return;
+      if (e.touches.length !== 2) return;
       e.preventDefault();
-      if (e.touches.length === 2) {
-        const dist = touchDistance(e.touches);
-        if (pinchStartDist > 0) {
-          const ratio = dist / pinchStartDist;
-          userZoom = Math.min(MAX_USER_ZOOM, Math.max(1, pinchStartZoom * ratio));
-          applyViewerTransform();
-        }
-      } else if (e.touches.length === 1 && panPointerId != null && userZoom > 1.01) {
-        const t = e.touches[0];
-        if (t.identifier !== panPointerId) return;
-        tx = panOriginTx + (t.clientX - panStartX);
-        ty = panOriginTy + (t.clientY - panStartY);
+      const dist = touchDistance(e.touches);
+      if (pinchStartDist > 0) {
+        const ratio = dist / pinchStartDist;
+        userZoom = Math.min(MAX_USER_ZOOM, Math.max(1, pinchStartZoom * ratio));
         applyViewerTransform();
+        stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
       }
     },
     { passive: false }
   );
 
   stage.addEventListener("touchend", () => {
-    pinchStartDist = 0;
-    panPointerId = null;
+    if (pinchStartDist > 0) pinchStartDist = 0;
   });
 
   const blockPageGesture = (e) => {

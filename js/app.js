@@ -178,13 +178,10 @@ async function checkAppVersionUpdate() {
 function showAppUpdateBanner(meta) {
   const banner = document.querySelector("#app-update-banner");
   if (banner && !banner.hidden) return;
-  const label = meta?.label || (meta?.build ? `빌드 ${meta.build}` : "새 버전");
   if (banner) {
     banner.hidden = false;
     if (meta?.build != null) banner.dataset.pendingBuild = String(meta.build);
     if (meta?.commitSha) banner.dataset.pendingSha = meta.commitSha;
-    const title = banner.querySelector(".app-update-banner-text");
-    if (title) title.textContent = `새 버전이 나왔어요 (${label})`;
   }
   if (updateBtn) {
     updateBtn.hidden = false;
@@ -932,16 +929,22 @@ function renderStopList() {
     btn.className = "stop-card";
     btn.dataset.stopId = stop.id;
 
+    const row = document.createElement("span");
+    row.className = "stop-card-row";
+
     const name = document.createElement("span");
     name.className = "stop-card-name";
     name.textContent = stop.name;
+    name.title = stop.name;
 
-    const date = document.createElement("span");
+    const dateText = formatStopDate(stop.updatedAt);
+    const date = document.createElement("time");
     date.className = "stop-card-date";
-    date.textContent = formatStopDate(stop.updatedAt);
-    date.setAttribute("aria-label", `등록 ${formatStopDate(stop.updatedAt)}`);
+    date.dateTime = stop.updatedAt || "";
+    date.textContent = dateText;
 
-    btn.append(name, date);
+    row.append(name, date);
+    btn.append(row);
     btn.addEventListener("click", () => {
       activeStopId = stop.id;
       renderStopDetail(stop.id);
@@ -2151,9 +2154,7 @@ function watchUpdates(reg) {
 function showUpdate(build) {
   if (document.body.classList.contains("bus-app")) {
     fetchVersionInfo().then((info) => {
-      showAppUpdateBanner(
-        info || { build, label: build ? `빌드 ${build}` : "새 버전" }
-      );
+      showAppUpdateBanner(info || (build != null ? { build } : null));
     });
     return;
   }

@@ -544,11 +544,92 @@ function getStopPreviewLine(stop) {
 function lineDisplayClass(line) {
   if (isLikelySectionTitle(line)) return "ocr-line--heading";
   if (/^\d{1,4}\s*번/.test(line) || /^노선\s*\d/.test(line)) return "ocr-line--route";
+  if (parseTimetableRowParts(line)) return "ocr-line--time-row";
   if (/\d{1,2}\s*[:：.．]\s*\d{2}/.test(line) || /^\d{4}$/.test(line.replace(/\s/g, ""))) {
     return "ocr-line--time";
   }
   if (/(평일|주말|토요|일요|공휴|방향|행)/.test(line)) return "ocr-line--label";
   return "ocr-line--body";
+}
+
+function isDirectionBlockTitle(title) {
+  return typeof title === "string" && /방면\s*$/.test(title.trim());
+}
+
+function isTableColumnHeader(line) {
+  const compact = line.replace(/\s+/g, "");
+  return (
+    /^출발시간.*종착지/.test(compact) ||
+    /^출발.*종착/.test(compact) ||
+    /^시간.*행선/.test(compact)
+  );
+}
+
+function isContactMetaLine(line) {
+  return (
+    /\(전화\)/.test(line) ||
+    /정류소/.test(line) ||
+    /010[\s\-·]?\d{4}/.test(line) ||
+    /슈퍼|마트/.test(line)
+  );
+}
+
+/** @param {string} line */
+function parseTimetableRowParts(line) {
+  const timeMatch = line.match(/(\d{1,2}\s*[:：.．]\s*\d{2})/);
+  if (!timeMatch) return null;
+  const parsed = parseMinutesFromLine(line);
+  if (parsed == null) return null;
+  const h = Math.floor(parsed / 60);
+  const m = parsed % 60;
+  const timeDisplay = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  let rest = line.slice((timeMatch.index ?? 0) + timeMatch[0].length);
+  rest = rest.replace(/^\s*[\|｜]\s*/, "").trim();
+  return { timeDisplay, destination: rest || null };
+}
+
+/**
+ * @param {string} line
+ * @param {number} blockIndex
+ * @param {number} groupIndex
+ */
+function buildOcrLineElement(line, blockIndex, groupIndex) {
+  const li = document.createElement("li");
+  li.dataset.blockIndex = String(blockIndex);
+  li.dataset.groupIndex = String(groupIndex);
+
+  if (isContactMetaLine(line)) {
+    li.className = "ocr-line--meta";
+    li.textContent = line;
+    return li;
+  }
+
+  if (isTableColumnHeader(line)) {
+    li.className = "ocr-line--colhead";
+    li.innerHTML =
+      '<span class="ocr-col-time">출발</span><span class="ocr-col-dest">종착지</span>';
+    return li;
+  }
+
+  const row = parseTimetableRowParts(line);
+  const busMins = parseMinutesFromLine(line);
+  if (row) {
+    li.className = "ocr-line--time-row";
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "ocr-time";
+    timeSpan.textContent = row.timeDisplay;
+    li.append(timeSpan);
+    const destSpan = document.createElement("span");
+    destSpan.className = row.destination ? "ocr-dest" : "ocr-dest ocr-dest--empty";
+    destSpan.textContent = row.destination || "—";
+    li.append(destSpan);
+  } else {
+    li.className = lineDisplayClass(line);
+    li.textContent = line;
+  }
+
+  if (busMins != null) li.dataset.busMinutes = String(busMins);
+  return li;
 }
 
 function getStopSections(stop) {
@@ -751,53 +832,59 @@ function renderStopDetail(stopId) {
 
   if (sectionsRoot && hasStructured) {
     sections.forEach((block, blockIndex) => {
-    if (!block.title && !block.lines.length) return;
-    const section = document.createElement("section");
-    const isDirection =
-      block.title === "장수 방면" || block.title === "산서 방면";
-    section.className = isDirection ? "ocr-block ocr-block-direction" : "ocr-block";
-    section.dataset.blockIndex = String(blockIndex);
-    if (block.title) {
-      const heading = document.createElement("h3");
-      heading.className = "ocr-block-title";
-      heading.textContent = block.title;
-      section.append(heading);
-    }
+      if (!block.title && !block.lines.length) return;
+      const section = document.createElement("section");
+      const isDirection = isDirectionBlockTitle(block.title);
+      const isPlacard =
+        Boolean(block.title) &&
+        !block.lines.some((l) => parseMinutesFromLine(l) != null);
+      section.className = "ocr-block";
+      if (isDirection) section.classList.add("ocr-block-direction");
+      if (isPlacard && !isDirection) section.classList.add("ocr-block-placard");
+      section.dataset.blockIndex = String(blockIndex);
+      if (block.title) {
+        const heading = document.createElement("h3");
+        heading.className = "ocr-block-title";
+        heading.textContent = block.title;
+        section.append(heading);
+      }
 
-    let groupIndex = 0;
-    let timesInGroup = false;
-    const ul = document.createElement("ul");
-    ul.className = "ocr-block-lines";
+      let groupIndex = 0;
+      let timesInGroup = false;
+      let colheadDone = false;
+      const useTableLayout = block.lines.some(
+        (l) => parseTimetableRowParts(l) || isTableColumnHeader(l)
+      );
+      const ul = document.createElement("ul");
+      ul.className = useTableLayout
+        ? "ocr-block-lines ocr-block-lines--table"
+        : "ocr-block-lines";
 
-    for (const line of block.lines) {
-      if (isRouteHeaderLine(line)) {
-        if (timesInGroup) {
-          groupIndex += 1;
-          timesInGroup = false;
+      for (const line of block.lines) {
+        if (isTableColumnHeader(line)) {
+          if (colheadDone) continue;
+          colheadDone = true;
         }
-        const li = document.createElement("li");
-        li.className = lineDisplayClass(line);
-        li.textContent = line;
-        li.dataset.blockIndex = String(blockIndex);
-        li.dataset.groupIndex = String(groupIndex);
+        if (isRouteHeaderLine(line)) {
+          if (timesInGroup) {
+            groupIndex += 1;
+            timesInGroup = false;
+          }
+          const li = document.createElement("li");
+          li.className = lineDisplayClass(line);
+          li.textContent = line;
+          li.dataset.blockIndex = String(blockIndex);
+          li.dataset.groupIndex = String(groupIndex);
+          ul.append(li);
+          continue;
+        }
+
+        const li = buildOcrLineElement(line, blockIndex, groupIndex);
+        if (parseMinutesFromLine(line) != null) timesInGroup = true;
         ul.append(li);
-        continue;
       }
 
-      const li = document.createElement("li");
-      li.className = lineDisplayClass(line);
-      li.textContent = line;
-      li.dataset.blockIndex = String(blockIndex);
-      li.dataset.groupIndex = String(groupIndex);
-      const busMins = parseMinutesFromLine(line);
-      if (busMins != null) {
-        li.dataset.busMinutes = String(busMins);
-        timesInGroup = true;
-      }
-      ul.append(li);
-    }
-
-      section.append(ul);
+      if (ul.childElementCount) section.append(ul);
       sectionsRoot.append(section);
     });
     if (fallback) fallback.hidden = true;
@@ -1003,6 +1090,7 @@ function organizeOcrText(text) {
 
 function isLikelySectionTitle(line) {
   if (line.length > 28) return false;
+  if (/.+\s*방면\s*$/.test(line) && line.length <= 18) return true;
   const keywords =
     /(평일|주말|토요|일요|공휴|비번|노선|방향|출발|도착|행|회차|첫차|막차|심야|시내|읍내|마을|시간표|배차|운행|요일|격일|순환)/;
   if (keywords.test(line)) return true;

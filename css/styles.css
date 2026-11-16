@@ -847,6 +847,17 @@ footer {
   font-size: clamp(1.45rem, 5vw, 1.75rem);
 }
 
+.ocr-block-placard {
+  padding: 0.35rem 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.ocr-block-placard .ocr-block-title {
+  font-size: clamp(1.55rem, 5.5vw, 1.95rem);
+}
+
 .ocr-block-title {
   margin: 0 0 0.65rem;
   font-size: clamp(1.35rem, 4.5vw, 1.65rem);
@@ -874,6 +885,58 @@ footer {
   overflow-wrap: anywhere;
 }
 
+.ocr-block-lines--table {
+  gap: 0.45rem;
+}
+
+.ocr-block-lines--table .ocr-line--colhead,
+.ocr-block-lines--table .ocr-line--time-row {
+  display: grid;
+  grid-template-columns: minmax(5.25rem, 34%) 1fr;
+  column-gap: 0.75rem;
+  align-items: center;
+}
+
+.ocr-line--colhead {
+  padding: 0.15rem 0.85rem 0.35rem;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #52525b;
+  background: transparent;
+  border: none;
+}
+
+.ocr-line--time-row {
+  background: #fff;
+  border-color: #e4e4e7;
+  white-space: normal;
+}
+
+.ocr-line--time-row .ocr-time {
+  font-size: clamp(1.5rem, 5vw, 1.95rem);
+  font-weight: 800;
+  color: #0c4a6e;
+  letter-spacing: 0.02em;
+}
+
+.ocr-line--time-row .ocr-dest {
+  font-size: clamp(1.15rem, 3.8vw, 1.4rem);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ocr-dest--empty {
+  color: #a1a1aa;
+}
+
+.ocr-line--meta {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #52525b;
+  background: #f4f4f5;
+  border-color: #d4d4d8;
+}
+
 .ocr-line--time {
   font-size: clamp(1.45rem, 5vw, 1.85rem);
   font-weight: 800;
@@ -891,8 +954,13 @@ footer {
   box-shadow: 0 0 0 2px #fdba74;
 }
 
+.ocr-line--time-row.ocr-line--next .ocr-time {
+  color: #9a3412;
+}
+
 .ocr-line-next-badge {
   display: block;
+  grid-column: 1 / -1;
   font-size: clamp(1.05rem, 3.5vw, 1.25rem);
   font-weight: 800;
   color: #9a3412;

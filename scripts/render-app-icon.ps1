@@ -1,4 +1,4 @@
-# Renders bus + clock PWA icons (192 / 512 / maskable).
+﻿# Renders bus + clock PWA icons (192 / 512 / maskable).
 param(
   [string]$OutDir = (Join-Path $PSScriptRoot "..\icons")
 )
@@ -16,15 +16,16 @@ function New-BusClockIcon {
   $pad = [int]($Size * $PadRatio)
   $inner = $Size - 2 * $pad
 
+  # 시계·버스를 아이콘 안에 최대한 꽉 차게 (여백은 PadRatio로만)
   $blue = [System.Drawing.Color]::FromArgb(255, 2, 132, 199)
   $dark = [System.Drawing.Color]::FromArgb(255, 3, 105, 161)
   $orange = [System.Drawing.Color]::FromArgb(255, 234, 88, 12)
   $white = [System.Drawing.Color]::White
   $ink = [System.Drawing.Color]::FromArgb(255, 12, 74, 110)
 
-  $clockSize = [int]($inner * 0.52)
-  $cx = $pad + [int]($inner * 0.38)
-  $cy = $pad + [int]($inner * 0.42)
+  $clockSize = [int]($inner * 0.72)
+  $cx = $pad + [int]($inner * 0.41)
+  $cy = $pad + [int]($inner * 0.34)
 
   $clockBrush = New-Object System.Drawing.SolidBrush $white
   $half = [int]($clockSize / 2)
@@ -32,8 +33,8 @@ function New-BusClockIcon {
   $clockPen = New-Object System.Drawing.Pen($dark, ([Math]::Max(2, [int]($Size / 64))))
   $g.DrawEllipse($clockPen, $cx - $half, $cy - $half, $clockSize, $clockSize)
 
-  $hourLen = $clockSize * 0.22
-  $minLen = $clockSize * 0.32
+  $hourLen = $clockSize * 0.24
+  $minLen = $clockSize * 0.34
   $hourAng = -50 * [Math]::PI / 180
   $minAng = 75 * [Math]::PI / 180
   $hourPen = New-Object System.Drawing.Pen($ink, ([Math]::Max(3, [int]($Size / 48))))
@@ -58,14 +59,14 @@ function New-BusClockIcon {
   $dot = [Math]::Max(4, [int]($Size / 64))
   $g.FillEllipse($dotBrush, $cx - $dot / 2, $cy - $dot / 2, $dot, $dot)
 
-  $busW = [int]($inner * 0.58)
-  $busH = [int]($inner * 0.36)
-  $bx = $pad + [int]($inner * 0.35)
-  $by = $pad + [int]($inner * 0.52)
+  $busW = [int]($inner * 0.80)
+  $busH = [int]($inner * 0.48)
+  $bx = $pad + [int]($inner * 0.16)
+  $by = $pad + [int]($inner * 0.44)
   $busRect = New-Object System.Drawing.Rectangle $bx, $by, $busW, $busH
   $busBrush = New-Object System.Drawing.SolidBrush $blue
   $g.FillRectangle($busBrush, $busRect)
-  $radius = [Math]::Min(12, [int]($Size / 24))
+  $radius = [Math]::Min(16, [int]($Size / 20))
   $path = New-Object System.Drawing.Drawing2D.GraphicsPath
   $path.AddArc($busRect.X, $busRect.Y, $radius * 2, $radius * 2, 180, 90)
   $path.AddArc($busRect.Right - $radius * 2, $busRect.Y, $radius * 2, $radius * 2, 270, 90)
@@ -100,13 +101,13 @@ function Save-Icon([System.Drawing.Bitmap]$bmp, [string]$path) {
 }
 
 $out = (Resolve-Path $OutDir).Path
-$bmp512 = New-BusClockIcon -Size 512 -PadRatio 0.1
+$bmp512 = New-BusClockIcon -Size 512 -PadRatio 0.04
 Save-Icon $bmp512 (Join-Path $out "icon-512.png")
 
-$bmp192 = New-BusClockIcon -Size 192 -PadRatio 0.1
+$bmp192 = New-BusClockIcon -Size 192 -PadRatio 0.04
 Save-Icon $bmp192 (Join-Path $out "icon-192.png")
 
-$bmpMask = New-BusClockIcon -Size 512 -PadRatio 0.18
+$bmpMask = New-BusClockIcon -Size 512 -PadRatio 0.09
 Save-Icon $bmpMask (Join-Path $out "icon-maskable-512.png")
 
 $bmp512.Dispose()

@@ -67,6 +67,7 @@ function initApp() {
   loadBusState();
   bindBusUi();
   bindPhotoViewer();
+  bindSamsungPinchGuard();
   bindAppUpdateUi();
   startLiveClock();
   showListView();
@@ -298,6 +299,23 @@ function bindBusUi() {
     replaceStopId = null;
     nameDialog?.close();
   });
+}
+
+/** 삼성 인터넷 등: 홈·목록에서 브라우저 핀치 확대 차단 (뷰어 안만 허용) */
+function bindSamsungPinchGuard() {
+  if (!document.body.classList.contains("bus-app")) return;
+
+  const allowPinch = (target) =>
+    target instanceof Element && Boolean(target.closest("#photo-viewer-stage"));
+
+  const blockTwoFinger = (e) => {
+    if (e.touches.length < 2) return;
+    if (allowPinch(e.target)) return;
+    e.preventDefault();
+  };
+
+  document.addEventListener("touchstart", blockTwoFinger, { passive: false, capture: true });
+  document.addEventListener("touchmove", blockTwoFinger, { passive: false, capture: true });
 }
 
 let photoViewerScrollLockY = 0;

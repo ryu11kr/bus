@@ -35,6 +35,10 @@ body {
   color: var(--text);
 }
 
+html:has(body.bus-app) {
+  touch-action: pan-y;
+}
+
 body.bus-app {
   touch-action: pan-y;
 }

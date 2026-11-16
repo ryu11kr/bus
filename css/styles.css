@@ -492,9 +492,28 @@ footer {
 }
 
 .app-guide {
-  margin: 0 0 1.25rem;
+  margin: 0 0 0.65rem;
   font-size: 1.2rem;
   text-align: center;
+}
+
+.app-scope-note {
+  margin: 0 0 1.25rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--muted);
+}
+
+.photo-capture-tip {
+  margin: 1.1rem 0 0;
+  padding: 0.9rem 1rem;
+  font-size: 1.15rem;
+  line-height: 1.55;
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
 }
 
 .next-bus-card {
@@ -860,6 +879,19 @@ footer {
   font-weight: 800;
   border-color: #0284c7;
   background: #e0f2fe;
+}
+
+.ocr-line--next {
+  font-size: clamp(1.6rem, 5.5vw, 2rem);
+  border-color: #ea580c;
+  border-width: 3px;
+  background: #fff7ed;
+  box-shadow: 0 0 0 2px #fdba74;
+}
+
+.ocr-line--next::before {
+  content: "▶ ";
+  color: #c2410c;
 }
 
 .ocr-line--route {

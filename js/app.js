@@ -600,6 +600,152 @@ function lineDisplayClass(line) {
   return "ocr-line--body";
 }
 
+function getStopSections(stop) {
+  return stop.ocrText?.trim()
+    ? buildSectionsFromOcr(stop.ocrText)
+    : stop.sections?.length
+      ? stop.sections
+      : [];
+}
+
+/** @param {string} line */
+function parseMinutesFromLine(line) {
+  const compact = line.replace(/\s/g, "");
+  if (/^\d{4}$/.test(compact)) {
+    const h = Number(compact.slice(0, 2));
+    const m = Number(compact.slice(2, 4));
+    if (h < 24 && m < 60) return h * 60 + m;
+  }
+  const match = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (h >= 24 || m >= 60) return null;
+  return h * 60 + m;
+}
+
+/**
+ * @param {{ title?: string | null, lines: string[] }[]} sections
+ * @param {Date} [now]
+ */
+function findNextBusFromSections(sections, now = new Date()) {
+  /** @type {{ minutes: number, line: string, direction: string | null }[]} */
+  const entries = [];
+  for (const block of sections) {
+    for (const line of block.lines || []) {
+      const minutes = parseMinutesFromLine(line);
+      if (minutes != null) {
+        entries.push({
+          minutes,
+          line: line.trim(),
+          direction: block.title?.trim() || null,
+        });
+      }
+    }
+  }
+  if (!entries.length) return null;
+
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const sorted = [...entries].sort((a, b) => a.minutes - b.minutes);
+  let pick = sorted.find((e) => e.minutes >= nowMins);
+  let isTomorrow = false;
+  if (!pick) {
+    pick = sorted[0];
+    isTomorrow = true;
+  }
+  let diffMins = pick.minutes - nowMins;
+  if (isTomorrow) diffMins = 24 * 60 - nowMins + pick.minutes;
+
+  return { ...pick, isTomorrow, diffMins, nowMins };
+}
+
+/**
+ * @param {{ title?: string | null, lines: string[] }[]} sections
+ * @param {Date} [now]
+ */
+function findNextBusFromOcrText(text, now = new Date()) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return findNextBusFromSections([{ title: null, lines }], now);
+}
+
+function formatEtaMessage(diffMins, isTomorrow) {
+  if (isTomorrow) {
+    return "오늘 남은 차가 없습니다. 내일 첫 차입니다.";
+  }
+  if (diffMins <= 0) return "곧 출발합니다.";
+  if (diffMins < 60) return `약 ${diffMins}분 후 출발 (오늘 남은 차 중 가장 빠른 시간)`;
+  const h = Math.floor(diffMins / 60);
+  const m = diffMins % 60;
+  const wait =
+    m === 0 ? `약 ${h}시간 후 출발` : `약 ${h}시간 ${m}분 후 출발`;
+  return `${wait} (오늘 남은 차 중 가장 빠른 시간)`;
+}
+
+function clearNextBusHighlights() {
+  document
+    .querySelectorAll(".ocr-line--next")
+    .forEach((el) => el.classList.remove("ocr-line--next"));
+}
+
+/**
+ * @param {{ minutes: number, line: string, direction: string | null, isTomorrow: boolean, diffMins: number } | null} next
+ */
+function updateNextBusCard(next) {
+  const card = document.querySelector("#next-bus-card");
+  const label = document.querySelector("#next-bus-label");
+  const timeEl = document.querySelector("#next-bus-time");
+  const etaEl = document.querySelector("#next-bus-eta");
+  if (!card || !label || !timeEl || !etaEl) return;
+
+  if (!next) {
+    card.hidden = true;
+    timeEl.textContent = "";
+    etaEl.textContent = "";
+    return;
+  }
+
+  card.hidden = false;
+  label.textContent = next.isTomorrow ? "내일 가장 빠른 버스" : "가장 가까운 버스";
+  const dir = next.direction ? ` (${next.direction})` : "";
+  timeEl.textContent = `${next.line}${dir}`;
+  etaEl.textContent = formatEtaMessage(next.diffMins, next.isTomorrow);
+}
+
+function highlightNextBusLines(nextMinutes) {
+  clearNextBusHighlights();
+  if (nextMinutes == null) return;
+  document.querySelectorAll("[data-bus-minutes]").forEach((el) => {
+    const mins = Number(el.getAttribute("data-bus-minutes"));
+    if (Number.isFinite(mins) && mins === nextMinutes) {
+      el.classList.add("ocr-line--next");
+    }
+  });
+}
+
+function refreshActiveStopNextBus() {
+  const detail = document.querySelector("#view-detail");
+  if (!activeStopId || !detail || detail.hidden) return;
+  const stop = busStops.find((s) => s.id === activeStopId);
+  if (!stop) return;
+
+  const sections = getStopSections(stop);
+  const hasStructured = sections.some(
+    (block) => block.title || block.lines.some((l) => l.trim())
+  );
+  const now = new Date();
+  const next = hasStructured
+    ? findNextBusFromSections(sections, now)
+    : stop.ocrText?.trim()
+      ? findNextBusFromOcrText(stop.ocrText, now)
+      : null;
+
+  updateNextBusCard(next);
+  highlightNextBusLines(next?.minutes ?? null);
+}
+
 function renderStopDetail(stopId) {
   const stop = busStops.find((s) => s.id === stopId);
   if (!stop) {
@@ -625,11 +771,8 @@ function renderStopDetail(stopId) {
   if (photoDetails) photoDetails.removeAttribute("open");
 
   sectionsRoot?.replaceChildren();
-  const sections = stop.ocrText?.trim()
-    ? buildSectionsFromOcr(stop.ocrText)
-    : stop.sections?.length
-      ? stop.sections
-      : [];
+  clearNextBusHighlights();
+  const sections = getStopSections(stop);
   const hasStructured = sections.some(
     (block) => block.title || block.lines.some((l) => l.trim())
   );
@@ -653,6 +796,8 @@ function renderStopDetail(stopId) {
         const li = document.createElement("li");
         li.className = lineDisplayClass(line);
         li.textContent = line;
+        const busMins = parseMinutesFromLine(line);
+        if (busMins != null) li.dataset.busMinutes = String(busMins);
         ul.append(li);
       }
       section.append(ul);
@@ -672,6 +817,7 @@ function renderStopDetail(stopId) {
     if (emptyHint) emptyHint.hidden = false;
   }
 
+  refreshActiveStopNextBus();
   setBusStatus("");
 }
 
@@ -1103,6 +1249,9 @@ function startLiveClock() {
       clockKo.textContent = formatTimeKorean(now.getHours(), now.getMinutes())
         + ` ${now.getSeconds().toString().padStart(2, "0")}초`;
     }
+    if (now.getSeconds() === 0) {
+      refreshActiveStopNextBus();
+    }
   };
   tick();
   if (clockTimerId) window.clearInterval(clockTimerId);
@@ -1273,8 +1422,6 @@ function renderBuildStatus(serverBuild, controllerBuild, versionInfo) {
 
 function setDevServerHint(versionInfo) {
   if (!isLocalDevHost()) {
-    installHint.textContent =
-      "로컬 서버(127.0.0.1)로 열면 HTML 저장 후 업데이트 버튼이 동작합니다.";
     return;
   }
 

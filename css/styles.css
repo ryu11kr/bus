@@ -475,9 +475,10 @@ footer {
 }
 
 .top-clock-ko {
-  margin: 0.5rem 0 0;
-  font-size: 1.35rem;
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
   font-weight: 600;
+  color: var(--muted);
 }
 
 .bus-wrap {
@@ -492,28 +493,36 @@ footer {
 }
 
 .app-guide {
-  margin: 0 0 0.65rem;
-  font-size: 1.2rem;
-  text-align: center;
-}
-
-.app-scope-note {
-  margin: 0 0 1.25rem;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  text-align: center;
-  color: var(--muted);
-}
-
-.photo-capture-tip {
-  margin: 1.1rem 0 0;
-  padding: 0.9rem 1rem;
-  font-size: 1.15rem;
+  margin: 0 0 1.15rem;
+  padding: 0.85rem 1rem;
+  font-size: 1.1rem;
   line-height: 1.55;
   text-align: center;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 1rem;
+}
+
+.home-more {
+  margin: 0.75rem 0 0;
+}
+
+.home-more summary {
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.home-more-list {
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.home-more-list li + li {
+  margin-top: 0.45rem;
 }
 
 .next-bus-card {
@@ -766,13 +775,22 @@ footer {
 
 .back-btn-bottom {
   width: 100%;
-  margin-top: 1rem;
-  margin-bottom: 0.25rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0;
   font-weight: 800;
   color: #0c4a6e;
   background: #e0f2fe;
   border: 3px solid #0284c7;
   box-shadow: var(--shadow);
+}
+
+.view-list .section-heading {
+  margin-bottom: 0.5rem;
+}
+
+.times-empty {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
 }
 
 .detail-stop-name {
@@ -799,9 +817,10 @@ footer {
 
 .detail-text-label {
   margin: 0 0 0.85rem;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   font-weight: 800;
   text-align: center;
+  color: var(--muted);
 }
 
 .detail-empty-hint {

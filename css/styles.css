@@ -882,6 +882,8 @@ footer {
 }
 
 .ocr-line--next {
+  display: grid;
+  gap: 0.35rem;
   font-size: clamp(1.6rem, 5.5vw, 2rem);
   border-color: #ea580c;
   border-width: 3px;
@@ -889,9 +891,11 @@ footer {
   box-shadow: 0 0 0 2px #fdba74;
 }
 
-.ocr-line--next::before {
-  content: "▶ ";
-  color: #c2410c;
+.ocr-line-next-badge {
+  display: block;
+  font-size: clamp(1.05rem, 3.5vw, 1.25rem);
+  font-weight: 800;
+  color: #9a3412;
 }
 
 .ocr-line--route {

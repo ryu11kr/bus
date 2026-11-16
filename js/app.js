@@ -61,8 +61,6 @@ function initApp() {
 
   loadBusState();
   bindBusUi();
-  bindAiSettingsUi();
-  refreshAiQuotaUi().catch(() => {});
   bindAppUpdateUi();
   startLiveClock();
   showListView();
@@ -186,53 +184,6 @@ function getAiSettings() {
 
 function saveAiSettings(settings) {
   localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings));
-}
-
-function bindAiSettingsUi() {
-  const box = document.querySelector("#ai-auto");
-  if (!box) return;
-  const settings = getAiSettings();
-  box.checked = settings.auto;
-  box.addEventListener("change", () => {
-    saveAiSettings({ ...getAiSettings(), auto: box.checked });
-  });
-}
-
-async function refreshAiQuotaUi() {
-  const el = document.querySelector("#ai-quota-status");
-  if (!el) return;
-
-  if (location.protocol === "file:" || isLocalDevHost()) {
-    el.textContent =
-      "로컬 미리보기: 정밀 읽기 한도는 Vercel에 배포한 주소에서 확인됩니다.";
-    return;
-  }
-
-  const { endpoint } = getAiSettings();
-  const url = endpoint.startsWith("http")
-    ? endpoint
-    : new URL(endpoint, window.location.origin).href;
-
-  try {
-    const response = await fetch(url, { method: "GET", cache: "no-store" });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      el.textContent = data?.error || "정밀 읽기 한도를 가져오지 못했습니다.";
-      return;
-    }
-    const q = data.quota;
-    const model = data.model || "gemini";
-    const limit = q?.limit ?? data.appDailyLimit;
-    const used = q?.used ?? 0;
-    if (q?.unlimited || limit === 0) {
-      el.textContent = `정밀 읽기: 앱 일일 제한 없음 (오늘 ${used}회 사용, ${model}). Google 무료 한도만 적용됩니다.`;
-      return;
-    }
-    const remaining = q?.remaining ?? "?";
-    el.textContent = `오늘 정밀 읽기(앱): ${remaining}회 남음 / 하루 ${limit}회 (${model}). Google 무료 한도는 별도입니다.`;
-  } catch {
-    el.textContent = "배포 주소에서만 정밀 읽기 한도를 표시합니다.";
-  }
 }
 
 function bindBusUi() {
@@ -624,28 +575,51 @@ function parseMinutesFromLine(line) {
   return h * 60 + m;
 }
 
-/**
- * @param {{ title?: string | null, lines: string[] }[]} sections
- * @param {Date} [now]
- */
-function findNextBusFromSections(sections, now = new Date()) {
-  /** @type {{ minutes: number, line: string, direction: string | null }[]} */
-  const entries = [];
-  for (const block of sections) {
-    for (const line of block.lines || []) {
-      const minutes = parseMinutesFromLine(line);
-      if (minutes != null) {
-        entries.push({
-          minutes,
-          line: line.trim(),
-          direction: block.title?.trim() || null,
-        });
-      }
-    }
-  }
-  if (!entries.length) return null;
+function isRouteHeaderLine(line) {
+  return (
+    /^\d{1,4}\s*번/.test(line) ||
+    /^노선\s*\d/.test(line) ||
+    lineDisplayClass(line) === "ocr-line--route"
+  );
+}
 
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+/**
+ * 한 블록 안에서 「123번」 같은 줄이 있으면 노선별로 나눔.
+ * @param {string[]} lines
+ */
+function splitLinesIntoRouteGroups(lines) {
+  /** @type {{ label: string | null, lines: string[] }[]} */
+  const groups = [];
+  let current = { label: null, lines: [] };
+
+  const flush = () => {
+    if (current.lines.length || current.label) groups.push({ ...current });
+    current = { label: null, lines: [] };
+  };
+
+  for (const line of lines) {
+    if (isRouteHeaderLine(line)) {
+      if (current.label || current.lines.length) flush();
+      current.label = line.trim();
+      continue;
+    }
+    current.lines.push(line);
+  }
+  flush();
+
+  const withTimes = groups.filter((g) =>
+    g.lines.some((line) => parseMinutesFromLine(line) != null)
+  );
+  if (!withTimes.length) return [{ label: null, lines }];
+  return withTimes;
+}
+
+/**
+ * @param {{ minutes: number, line: string }[]} entries
+ * @param {number} nowMins
+ */
+function pickNextBusEntry(entries, nowMins) {
+  if (!entries.length) return null;
   const sorted = [...entries].sort((a, b) => a.minutes - b.minutes);
   let pick = sorted.find((e) => e.minutes >= nowMins);
   let isTomorrow = false;
@@ -655,74 +629,82 @@ function findNextBusFromSections(sections, now = new Date()) {
   }
   let diffMins = pick.minutes - nowMins;
   if (isTomorrow) diffMins = 24 * 60 - nowMins + pick.minutes;
+  return { ...pick, isTomorrow, diffMins };
+}
 
-  return { ...pick, isTomorrow, diffMins, nowMins };
+/** @param {string[]} lines @param {Date} [now] */
+function findNextBusInLines(lines, now = new Date()) {
+  const entries = [];
+  for (const line of lines) {
+    const minutes = parseMinutesFromLine(line);
+    if (minutes != null) entries.push({ minutes, line: line.trim() });
+  }
+  if (!entries.length) return null;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  return pickNextBusEntry(entries, nowMins);
 }
 
 /**
+ * 방면·노선 블록마다 가장 가까운 시각을 계산한다.
  * @param {{ title?: string | null, lines: string[] }[]} sections
- * @param {Date} [now]
  */
-function findNextBusFromOcrText(text, now = new Date()) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  return findNextBusFromSections([{ title: null, lines }], now);
+function computeNextBusByGroup(sections, now = new Date()) {
+  /** @type {{ blockIndex: number, groupIndex: number, minutes: number, line: string, isTomorrow: boolean, diffMins: number, blockTitle: string | null, routeLabel: string | null }[]} */
+  const picks = [];
+
+  sections.forEach((block, blockIndex) => {
+    const groups = splitLinesIntoRouteGroups(block.lines || []);
+    groups.forEach((group, groupIndex) => {
+      const next = findNextBusInLines(group.lines, now);
+      if (!next) return;
+      picks.push({
+        blockIndex,
+        groupIndex,
+        blockTitle: block.title?.trim() || null,
+        routeLabel: group.label,
+        ...next,
+      });
+    });
+  });
+
+  return picks;
 }
 
-function formatEtaMessage(diffMins, isTomorrow) {
-  if (isTomorrow) {
-    return "오늘 남은 차가 없습니다. 내일 첫 차입니다.";
-  }
-  if (diffMins <= 0) return "곧 출발합니다.";
-  if (diffMins < 60) return `약 ${diffMins}분 후 출발 (오늘 남은 차 중 가장 빠른 시간)`;
-  const h = Math.floor(diffMins / 60);
-  const m = diffMins % 60;
-  const wait =
-    m === 0 ? `약 ${h}시간 후 출발` : `약 ${h}시간 ${m}분 후 출발`;
-  return `${wait} (오늘 남은 차 중 가장 빠른 시간)`;
+function formatNextBusBadge(pick) {
+  if (pick.isTomorrow) return "가장 가까운 차 · 내일 첫 차";
+  if (pick.diffMins <= 0) return "가장 가까운 차 · 곧 출발";
+  if (pick.diffMins < 60) return `가장 가까운 차 · 약 ${pick.diffMins}분 후`;
+  const h = Math.floor(pick.diffMins / 60);
+  const m = pick.diffMins % 60;
+  if (m === 0) return `가장 가까운 차 · 약 ${h}시간 후`;
+  return `가장 가까운 차 · 약 ${h}시간 ${m}분 후`;
 }
 
 function clearNextBusHighlights() {
-  document
-    .querySelectorAll(".ocr-line--next")
-    .forEach((el) => el.classList.remove("ocr-line--next"));
-}
-
-/**
- * @param {{ minutes: number, line: string, direction: string | null, isTomorrow: boolean, diffMins: number } | null} next
- */
-function updateNextBusCard(next) {
-  const card = document.querySelector("#next-bus-card");
-  const label = document.querySelector("#next-bus-label");
-  const timeEl = document.querySelector("#next-bus-time");
-  const etaEl = document.querySelector("#next-bus-eta");
-  if (!card || !label || !timeEl || !etaEl) return;
-
-  if (!next) {
-    card.hidden = true;
-    timeEl.textContent = "";
-    etaEl.textContent = "";
-    return;
-  }
-
-  card.hidden = false;
-  label.textContent = next.isTomorrow ? "내일 가장 빠른 버스" : "가장 가까운 버스";
-  const dir = next.direction ? ` (${next.direction})` : "";
-  timeEl.textContent = `${next.line}${dir}`;
-  etaEl.textContent = formatEtaMessage(next.diffMins, next.isTomorrow);
-}
-
-function highlightNextBusLines(nextMinutes) {
-  clearNextBusHighlights();
-  if (nextMinutes == null) return;
-  document.querySelectorAll("[data-bus-minutes]").forEach((el) => {
-    const mins = Number(el.getAttribute("data-bus-minutes"));
-    if (Number.isFinite(mins) && mins === nextMinutes) {
-      el.classList.add("ocr-line--next");
-    }
+  document.querySelectorAll(".ocr-line--next").forEach((el) => {
+    el.classList.remove("ocr-line--next");
+    el.querySelector(".ocr-line-next-badge")?.remove();
   });
+}
+
+function applyNextBusHighlights(picks) {
+  clearNextBusHighlights();
+  if (!picks.length) return;
+
+  for (const pick of picks) {
+    const selector =
+      `li[data-block-index="${pick.blockIndex}"]` +
+      `[data-group-index="${pick.groupIndex}"]` +
+      `[data-bus-minutes="${pick.minutes}"]`;
+    document.querySelectorAll(selector).forEach((el) => {
+      el.classList.add("ocr-line--next");
+      if (el.querySelector(".ocr-line-next-badge")) return;
+      const badge = document.createElement("span");
+      badge.className = "ocr-line-next-badge";
+      badge.textContent = formatNextBusBadge(pick);
+      el.append(badge);
+    });
+  }
 }
 
 function refreshActiveStopNextBus() {
@@ -732,18 +714,8 @@ function refreshActiveStopNextBus() {
   if (!stop) return;
 
   const sections = getStopSections(stop);
-  const hasStructured = sections.some(
-    (block) => block.title || block.lines.some((l) => l.trim())
-  );
-  const now = new Date();
-  const next = hasStructured
-    ? findNextBusFromSections(sections, now)
-    : stop.ocrText?.trim()
-      ? findNextBusFromOcrText(stop.ocrText, now)
-      : null;
-
-  updateNextBusCard(next);
-  highlightNextBusLines(next?.minutes ?? null);
+  const picks = computeNextBusByGroup(sections, new Date());
+  applyNextBusHighlights(picks);
 }
 
 function renderStopDetail(stopId) {
@@ -778,31 +750,56 @@ function renderStopDetail(stopId) {
   );
 
   if (sectionsRoot && hasStructured) {
-    for (const block of sections) {
-      if (!block.title && !block.lines.length) continue;
-      const section = document.createElement("section");
-      const isDirection =
-        block.title === "장수 방면" || block.title === "산서 방면";
-      section.className = isDirection ? "ocr-block ocr-block-direction" : "ocr-block";
-      if (block.title) {
-        const heading = document.createElement("h3");
-        heading.className = "ocr-block-title";
-        heading.textContent = block.title;
-        section.append(heading);
-      }
-      const ul = document.createElement("ul");
-      ul.className = "ocr-block-lines";
-      for (const line of block.lines) {
+    sections.forEach((block, blockIndex) => {
+    if (!block.title && !block.lines.length) return;
+    const section = document.createElement("section");
+    const isDirection =
+      block.title === "장수 방면" || block.title === "산서 방면";
+    section.className = isDirection ? "ocr-block ocr-block-direction" : "ocr-block";
+    section.dataset.blockIndex = String(blockIndex);
+    if (block.title) {
+      const heading = document.createElement("h3");
+      heading.className = "ocr-block-title";
+      heading.textContent = block.title;
+      section.append(heading);
+    }
+
+    let groupIndex = 0;
+    let timesInGroup = false;
+    const ul = document.createElement("ul");
+    ul.className = "ocr-block-lines";
+
+    for (const line of block.lines) {
+      if (isRouteHeaderLine(line)) {
+        if (timesInGroup) {
+          groupIndex += 1;
+          timesInGroup = false;
+        }
         const li = document.createElement("li");
         li.className = lineDisplayClass(line);
         li.textContent = line;
-        const busMins = parseMinutesFromLine(line);
-        if (busMins != null) li.dataset.busMinutes = String(busMins);
+        li.dataset.blockIndex = String(blockIndex);
+        li.dataset.groupIndex = String(groupIndex);
         ul.append(li);
+        continue;
       }
+
+      const li = document.createElement("li");
+      li.className = lineDisplayClass(line);
+      li.textContent = line;
+      li.dataset.blockIndex = String(blockIndex);
+      li.dataset.groupIndex = String(groupIndex);
+      const busMins = parseMinutesFromLine(line);
+      if (busMins != null) {
+        li.dataset.busMinutes = String(busMins);
+        timesInGroup = true;
+      }
+      ul.append(li);
+    }
+
       section.append(ul);
       sectionsRoot.append(section);
-    }
+    });
     if (fallback) fallback.hidden = true;
     if (emptyHint) emptyHint.hidden = true;
   } else if (stop.ocrText?.trim() && fallback) {
@@ -1190,11 +1187,9 @@ async function refineTimetableWithAi(dataUrl) {
           "인공지능 모델이 갱신되었습니다. 앱을 새로고침하고 다시 시도해 주세요. 계속되면 잠시 뒤 다시 배포된 버전으로 시도하세요.";
       }
       setBusStatus(msg);
-      refreshAiQuotaUi().catch(() => {});
       return null;
     }
     if (typeof payload.text === "string" && payload.text.trim()) {
-      refreshAiQuotaUi().catch(() => {});
       return { text: payload.text };
     }
     setBusStatus("인공지능이 글자를 찾지 못했습니다.");

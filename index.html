@@ -77,18 +77,6 @@
         <h2 id="detail-stop-name" class="detail-stop-name"></h2>
         <p id="detail-updated" class="detail-meta"></p>
 
-        <div
-          id="next-bus-card"
-          class="next-bus-card"
-          hidden
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <p id="next-bus-label" class="next-bus-label">가장 가까운 버스</p>
-          <p id="next-bus-time" class="next-bus-time"></p>
-          <p id="next-bus-eta" class="next-bus-eta"></p>
-        </div>
-
         <div class="detail-text-panel" aria-labelledby="detail-stop-name">
           <p class="detail-text-label">시간표 (글자로 보기)</p>
           <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
@@ -127,20 +115,6 @@
           </button>
         </div>
       </section>
-
-      <details class="ai-settings panel-lite">
-        <summary>읽기 설정 (인터넷 사용)</summary>
-        <label class="ai-toggle">
-          <input id="ai-auto" type="checkbox" checked />
-          <span>기본 OCR이 비었거나 깨져 보일 때만 정밀 읽기 자동 시도</span>
-        </label>
-        <p id="ai-quota-status" class="ai-quota-status" aria-live="polite"></p>
-        <p class="ai-settings-hint">
-          정밀 읽기는 <strong>Google Gemini 무료 API</strong>를 씁니다 (개발자
-          키는 서버에만 둠). 로컬 <code>serve.cmd</code>만으로는 API가 없을 수
-          있습니다.
-        </p>
-      </details>
 
       <main id="app" class="bus-main" aria-label="버스 시간표">
         <input

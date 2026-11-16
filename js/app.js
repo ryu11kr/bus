@@ -572,8 +572,15 @@ function isDirectionHeadingLine(line) {
   return c.length <= 24 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c);
 }
 
+function cleanMarkdownHeading(text) {
+  return String(text)
+    .trim()
+    .replace(/^#{1,6}\s*/, "")
+    .trim();
+}
+
 function formatDirectionTitle(title) {
-  const t = title.trim();
+  const t = cleanMarkdownHeading(title);
   const c = compactKoreanLine(t);
   if (/[→➔]/.test(t) && !/.+방면$/.test(c)) return t;
   if (!/.+방면$/.test(c)) return t;
@@ -675,6 +682,16 @@ function countTimeTokens(line) {
   return (line.match(/\d{1,2}\s*[:：.．]\s*\d{2}/g) || []).length;
 }
 
+/** 출발 시각 + 종착지명 (2열 시각 표가 아님) */
+function lineHasTimeAndDestination(line) {
+  if (lineHasPairedBusTimes(line)) return false;
+  if (countTimeTokens(line) !== 1) return false;
+  const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
+  if (!m) return false;
+  const after = line.slice((m.index ?? 0) + m[0].length).replace(/^\s*[\|｜]\s*/, "").trim();
+  return /[가-힣A-Za-z]{2,}/.test(after);
+}
+
 /** 한 줄에 시각 두 개 + `|` 또는 12시간 괄호 (2열 표) */
 function lineHasPairedBusTimes(line) {
   if (countTimeTokens(line) < 2) return false;
@@ -710,6 +727,9 @@ function parseTimetableRowParts(line) {
 function blockUsesTableLayout(lines) {
   if (!lines?.length) return false;
   if (lines.some(isTableColumnHeader)) return true;
+  const timeDestRows = lines.filter(lineHasTimeAndDestination);
+  if (timeDestRows.length >= 2) return true;
+
   const piped = lines.filter((l) => /[\|｜]/.test(l));
   if (piped.length < 2) return false;
   const pairedRows = piped.filter(lineHasPairedBusTimes);
@@ -982,7 +1002,7 @@ function renderStopDetail(stopId) {
         heading.className = "ocr-block-title";
         heading.textContent = isDirection
           ? formatDirectionTitle(block.title)
-          : block.title;
+          : cleanMarkdownHeading(block.title);
         section.append(heading);
       }
 
@@ -1097,22 +1117,19 @@ function parseStructuredTimetableText(text) {
     const line = raw.replace(/\s+/g, " ").trim();
     if (!line) continue;
 
-    const top = line.match(/^#\s+(.+)/);
-    const section = line.match(/^##\s+(.+)/);
-    if (top && !section) {
+    const mdHead = line.match(/^(#{1,6})\s*(.+)$/);
+    if (mdHead) {
+      const level = mdHead[1].length;
+      const title = cleanMarkdownHeading(mdHead[2]);
       if (current?.title || current?.lines?.length) sections.push(current);
-      current = { title: top[1].trim(), lines: [] };
-      continue;
-    }
-    if (section) {
-      if (current?.title || current?.lines?.length) sections.push(current);
-      current = { title: section[1].trim(), lines: [] };
+      current = { title: level >= 2 ? title : title, lines: [] };
+      if (level === 1) continue;
       continue;
     }
     if (!current) current = { title: null, lines: [] };
 
     if (lineLooksLikeTimeValue(line)) {
-      current.lines.push(normalizeTimetableTimeLine(line));
+      current.lines.push(normalizeScheduleRow(line));
     } else if (!isContactMetaLine(line)) {
       current.lines.push(line);
     }
@@ -1239,7 +1256,8 @@ function tryReorganizeTwoColumnBoard(text) {
   return sections;
 }
 
-function normalizeTimetableTimeLine(line) {
+/** 출발|종착 행 — 종착지 유지 */
+function normalizeScheduleRow(line) {
   const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
   if (!m) return line.trim();
   let h = Number(m[1]);
@@ -1248,12 +1266,21 @@ function normalizeTimetableTimeLine(line) {
   h = infer24hFromParenContext(line, h);
   const time = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
   let rest = line.slice((m.index ?? 0) + m[0].length);
-  rest = rest
-    .replace(/^\s*[\|｜]\s*/, "")
-    .replace(/[\(\（][^)\）]*[\)\）]?/, "")
-    .replace(/^[\)\）\s]+/, "")
-    .trim();
+  rest = rest.replace(/^\s*[\|｜]\s*/, "").trim();
+  if (lineHasPairedBusTimes(line)) {
+    rest = rest
+      .replace(/[\(\（][^)\）]*[\)\）]?/, "")
+      .replace(/^[\)\）\s]+/, "")
+      .trim();
+  }
   return rest ? `${time} ${rest}` : time;
+}
+
+/** 2열 표에서 시각만 필요할 때 */
+function normalizeTimetableTimeLine(line) {
+  const row = normalizeScheduleRow(line);
+  const m = row.match(/^(\d{1,2}:\d{2})/);
+  return m ? m[1] : row.trim();
 }
 
 function isJunkTimetableHeaderLine(line) {
@@ -1263,9 +1290,22 @@ function isJunkTimetableHeaderLine(line) {
   return false;
 }
 
+function structuredSectionsLackDestinations(sections) {
+  const rows = sections.flatMap((b) => b.lines || []);
+  if (rows.length < 2) return false;
+  const timed = rows.filter((l) => countTimeTokens(l) >= 1);
+  if (timed.length < 2) return false;
+  return timed.every((l) => /^\d{1,2}:\d{2}\s*$/.test(l.trim()));
+}
+
 function buildSectionsFromOcr(text) {
   const structured = parseStructuredTimetableText(text);
-  if (structured?.length) return structured;
+  if (
+    structured?.length &&
+    !structuredSectionsLackDestinations(structured)
+  ) {
+    return structured;
+  }
   const twoCol = tryReorganizeTwoColumnBoard(text);
   if (twoCol) return twoCol;
   return organizeOcrText(text);

@@ -10,7 +10,7 @@
 ## 글자 읽기 (2단계)
 
 1. **1차 — Tesseract OCR** (무료, 기기에서 실행)
-2. **2차 — Gemini 정밀 읽기** (무료 티어, 서버 경유) — **OCR이 판독 불가일 때만** 자동, 또는 상세 화면에서 수동
+2. **2차 — Gemini 정밀 읽기** (무료 티어, 서버 경유) — **정거장 등록·사진 다시 찍기** 때 자동 (온라인)
 
 ## Gemini 무료 — 하루 몇 번?
 
@@ -39,7 +39,7 @@ KV(`KV_REST_API_URL` / `KV_REST_API_TOKEN`)를 Vercel에 연결하면 카운트�
 2. Environment Variables:
    - **`GEMINI_API_KEY`** — [Google AI Studio](https://aistudio.google.com/apikey) 에서 발급 (무료 티어)
    - **`GEMINI_MODEL`** — 선택 (기본 `gemini-3.5-flash-lite`. 예전 `gemini-2.5-*` 는 신규 키에서 불가)
-   - **`APP_DAILY_AI_LIMIT`** — 선택 (기본 `50`)
+   - **`APP_DAILY_AI_LIMIT`** — 선택 (미설정·`0` = 앱 제한 없음)
    - **`KV_REST_API_URL` / `KV_REST_API_TOKEN`** — 선택 (일일 카운트 정확화)
 3. 배포 후 앱이 `/api/ocr-refine` 호출
 

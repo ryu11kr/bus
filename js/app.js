@@ -339,7 +339,7 @@ async function handleBusPhoto(input) {
     const blob = await fetch(thumb).then((r) => r.blob());
     const ocr = await recognizeTextFromImage(blob);
     let text = ocr.text.trim();
-    let sections = organizeOcrText(text);
+    let sections = buildSectionsFromOcr(text);
     let ocrSource = "tesseract";
 
     if (shouldTryAiRefine(text)) {
@@ -349,7 +349,7 @@ async function handleBusPhoto(input) {
       const ai = await refineTimetableWithAi(thumb);
       if (ai?.text) {
         text = ai.text.trim();
-        sections = organizeOcrText(text);
+        sections = buildSectionsFromOcr(text);
         ocrSource = "ai";
       }
     }
@@ -522,7 +522,11 @@ function renderStopDetail(stopId) {
   if (photoDetails) photoDetails.removeAttribute("open");
 
   sectionsRoot?.replaceChildren();
-  const sections = stop.sections?.length ? stop.sections : organizeOcrText(stop.ocrText);
+  const sections = stop.ocrText?.trim()
+    ? buildSectionsFromOcr(stop.ocrText)
+    : stop.sections?.length
+      ? stop.sections
+      : [];
   const hasStructured = sections.some(
     (block) => block.title || block.lines.some((l) => l.trim())
   );
@@ -531,7 +535,9 @@ function renderStopDetail(stopId) {
     for (const block of sections) {
       if (!block.title && !block.lines.length) continue;
       const section = document.createElement("section");
-      section.className = "ocr-block";
+      const isDirection =
+        block.title === "장수 방면" || block.title === "산서 방면";
+      section.className = isDirection ? "ocr-block ocr-block-direction" : "ocr-block";
       if (block.title) {
         const heading = document.createElement("h3");
         heading.className = "ocr-block-title";
@@ -574,6 +580,68 @@ function formatStopDate(iso) {
   } catch {
     return "";
   }
+}
+
+/**
+ * 이중 방면(장수/산서) 시간표처럼 한 줄에 시각이 두 번 나오면 좌·우로 나눔.
+ * @param {string} text
+ * @returns {{ title: string | null, lines: string[] }[]}
+ */
+function buildSectionsFromOcr(text) {
+  const dual = tryReorganizeDualDirectionBoard(text);
+  if (dual) return dual;
+  return organizeOcrText(text);
+}
+
+function tryReorganizeDualDirectionBoard(text) {
+  const hasDirection = /장수\s*방면|산서\s*방면|방면/.test(text);
+  const hasPairedTimes = /\d{1,2}:\d{2}.+\d{1,2}:\d{2}/.test(text);
+  if (!hasDirection && !hasPairedTimes) return null;
+
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const towardJangsu = [];
+  const towardSanseo = [];
+  let placard = null;
+  let pairedRows = 0;
+
+  for (const line of rawLines) {
+    if (/^필덕입구$/.test(line) || /^[가-힣]{2,8}입구$/.test(line)) {
+      placard = line;
+      continue;
+    }
+    if (/장수군|장수버스|www\.|http|\.kr$/i.test(line)) continue;
+    if (/^장수\s*방면\s*산서\s*방면/.test(line)) continue;
+    if (/^장수\s*방면$|^산서\s*방면$/.test(line)) continue;
+    if (line.length < 2) continue;
+
+    const times = [...line.matchAll(/\d{1,2}:\d{2}/g)];
+    if (times.length >= 2) {
+      pairedRows++;
+      const splitAt = times[1].index ?? line.length;
+      const left = line.slice(0, splitAt).trim();
+      const right = line.slice(splitAt).trim();
+      if (left) towardJangsu.push(left);
+      if (right) towardSanseo.push(right);
+    } else if (times.length === 1) {
+      const only = line.trim();
+      if ((times[0].index ?? 99) <= 3) towardJangsu.push(only);
+      else towardSanseo.push(only);
+    }
+  }
+
+  if (pairedRows < 2 && (towardJangsu.length < 2 || towardSanseo.length < 2)) {
+    return null;
+  }
+
+  const sections = [];
+  if (placard) sections.push({ title: placard, lines: [] });
+  if (towardJangsu.length) sections.push({ title: "장수 방면", lines: towardJangsu });
+  if (towardSanseo.length) sections.push({ title: "산서 방면", lines: towardSanseo });
+  return sections.length ? sections : null;
 }
 
 /**
@@ -841,7 +909,7 @@ async function runAiRefineForStop(stopId) {
     if (!ai?.text) return;
 
     stop.ocrText = ai.text.trim();
-    stop.sections = organizeOcrText(stop.ocrText);
+    stop.sections = buildSectionsFromOcr(stop.ocrText);
     stop.updatedAt = new Date().toISOString();
     saveBusState();
     renderStopDetail(stop.id);

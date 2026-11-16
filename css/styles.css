@@ -790,6 +790,16 @@ footer {
   border: 2px solid var(--line);
 }
 
+.ocr-block-direction {
+  border-color: #0284c7;
+  background: #f8fafc;
+}
+
+.ocr-block-direction .ocr-block-title {
+  color: #0c4a6e;
+  font-size: clamp(1.45rem, 5vw, 1.75rem);
+}
+
 .ocr-block-title {
   margin: 0 0 0.65rem;
   font-size: clamp(1.35rem, 4.5vw, 1.65rem);

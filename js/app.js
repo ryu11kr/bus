@@ -317,7 +317,9 @@ function loadBusState() {
           name: s.name,
           photoThumb: s.photoThumb,
           ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
-          sections: Array.isArray(s.sections) ? s.sections : organizeOcrText(s.ocrText || ""),
+          sections: Array.isArray(s.sections)
+            ? s.sections
+            : buildSectionsFromOcr(s.ocrText || ""),
           updatedAt: s.updatedAt || new Date().toISOString(),
         }));
     }
@@ -958,16 +960,12 @@ function renderStopDetail(stopId) {
   const sectionsRoot = document.querySelector("#detail-sections");
   const fallback = document.querySelector("#detail-ocr-fallback");
   const emptyHint = document.querySelector("#detail-empty-hint");
-  const photoDetails = document.querySelector(".original-photo");
-
   if (title) title.textContent = stop.name;
   if (meta) meta.textContent = `마지막 저장: ${formatStopDate(stop.updatedAt)}`;
   if (img) {
     img.src = stop.photoThumb;
     img.alt = `${stop.name} 버스 시간표 원본 사진`;
   }
-  if (photoDetails) photoDetails.removeAttribute("open");
-
   sectionsRoot?.replaceChildren();
   clearNextBusHighlights();
   const sections = getStopSections(stop);
@@ -1122,43 +1120,6 @@ function parseAiTimetableJson(text) {
   return stripPrivacyFromSections(sections);
 }
 
-/** 예전 AI 마크다운 `##` (ocrText 호환) */
-function parseStructuredTimetableText(text) {
-  if (!/^##\s+/m.test(text) && !/^#\s+/m.test(text)) return null;
-
-  /** @type {{ title: string | null, lines: string[] }[]} */
-  const sections = [];
-  let current = null;
-
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\s+/g, " ").trim();
-    if (!line) continue;
-
-    const mdHead = line.match(/^(#{1,6})\s*(.+)$/);
-    if (mdHead) {
-      const level = mdHead[1].length;
-      const title = cleanMarkdownHeading(mdHead[2]);
-      if (current?.title || current?.lines?.length) sections.push(current);
-      current = { title: level >= 2 ? title : title, lines: [] };
-      if (level === 1) continue;
-      continue;
-    }
-    if (!current) current = { title: null, lines: [] };
-
-    if (lineLooksLikeTimeValue(line)) {
-      current.lines.push(normalizeScheduleRow(line));
-    } else if (!isContactMetaLine(line)) {
-      current.lines.push(line);
-    }
-  }
-  if (current?.title || current?.lines?.length) sections.push(current);
-
-  const timed = sections.filter((s) =>
-    (s.lines || []).some((l) => countTimeTokens(l) >= 1)
-  );
-  return timed.length ? stripPrivacyFromSections(timed) : null;
-}
-
 function infer24hFromParenContext(line, hour) {
   const paren = line.match(/[\(\（]\s*(\d{1,2})\s*[:：.．]\s*(\d{2})\s*[\)\）]/);
   if (!paren || hour >= 13) return hour;
@@ -1192,67 +1153,25 @@ function normalizeScheduleRow(line) {
   return rest ? `${time} ${rest}` : time;
 }
 
-function structuredSectionsLackDestinations(sections) {
-  const rows = sections.flatMap((b) => b.lines || []);
-  if (rows.length < 2) return false;
-  const timed = rows.filter((l) => countTimeTokens(l) >= 1);
-  if (timed.length < 2) return false;
-  return timed.every((l) => /^\d{1,2}:\d{2}\s*$/.test(l.trim()));
-}
-
+/** 표 재구성 없음 — 읽은 줄 순서 그대로 한 덩어리 (구형 JSON만 예외) */
 function buildSectionsFromOcr(text) {
-  const fromJson = parseAiTimetableJson(text);
+  const trimmed = text?.trim();
+  if (!trimmed) return [];
+
+  const fromJson = parseAiTimetableJson(trimmed);
   if (fromJson?.length) return fromJson;
 
-  const fromMd = parseStructuredTimetableText(text);
-  if (fromMd?.length && !structuredSectionsLackDestinations(fromMd)) {
-    return fromMd;
-  }
-
-  return organizeOcrText(text);
-}
-
-/**
- * 사진에서 읽은 글자를 원본 순서대로 묶어서 보여 준다. 고정 표가 아님.
- * @param {string} text
- * @returns {{ title: string | null, lines: string[] }[]}
- */
-function organizeOcrText(text) {
-  const rawLines = text
+  const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((l) => !isContactMetaLine(l))
+    .map((l) =>
+      lineLooksLikeTimeValue(l) ? normalizeScheduleRow(l) : l
+    );
 
-  if (!rawLines.length) return [];
-
-  const sections = [];
-  let current = { title: null, lines: [] };
-
-  const flush = () => {
-    if (current.title || current.lines.length) {
-      sections.push({
-        title: current.title,
-        lines: [...current.lines],
-      });
-    }
-    current = { title: null, lines: [] };
-  };
-
-  for (const line of rawLines) {
-    if (isLikelySectionTitle(line)) {
-      flush();
-      current.title = line;
-    } else {
-      current.lines.push(line);
-    }
-  }
-  flush();
-
-  if (sections.length === 1 && !sections[0].title && sections[0].lines.length > 6) {
-    return splitLooseBlocks(sections[0].lines);
-  }
-
-  return sections;
+  if (!lines.length) return [];
+  return [{ title: null, lines }];
 }
 
 function isLikelySectionTitle(line) {
@@ -1265,23 +1184,6 @@ function isLikelySectionTitle(line) {
   if (/^노선\s*\d+/.test(line)) return true;
   if (/^[▶►\-–=]/.test(line) && line.length <= 20) return true;
   return false;
-}
-
-function splitLooseBlocks(lines) {
-  const blocks = [];
-  let chunk = [];
-  for (const line of lines) {
-    if (isLikelySectionTitle(line) && chunk.length) {
-      blocks.push({ title: null, lines: chunk });
-      chunk = [line];
-    } else if (isLikelySectionTitle(line) && !chunk.length) {
-      blocks.push({ title: line, lines: [] });
-    } else {
-      chunk.push(line);
-    }
-  }
-  if (chunk.length) blocks.push({ title: null, lines: chunk });
-  return blocks.length ? blocks : [{ title: null, lines }];
 }
 
 async function compressImageFile(file, maxWidth) {

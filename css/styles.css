@@ -931,6 +931,16 @@ footer {
   cursor: pointer;
 }
 
+.detail-photo-primary {
+  margin: 0 0 1rem;
+}
+
+.detail-photo-label {
+  margin: 0 0 0.65rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
 .detail-photo-wrap {
   margin: 0.75rem 0 0;
 }

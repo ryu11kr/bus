@@ -40,7 +40,7 @@
       <h1 class="app-name" id="app-title">내버스시간표</h1>
       <p class="app-guide" id="app-lede">
         정류장 <strong>이름</strong>과 <strong>시간표 사진</strong>만 등록하세요.
-        화면에는 <strong>글자만</strong> 크게 보여 드립니다.
+        <strong>사진</strong>이 기준이고, 아래 글자는 참고용입니다.
       </p>
 
       <!-- 목록 화면 -->
@@ -97,33 +97,31 @@
         <h2 id="detail-stop-name" class="detail-stop-name"></h2>
         <p id="detail-updated" class="detail-meta"></p>
 
-        <div class="detail-text-panel" aria-labelledby="detail-stop-name">
-          <p class="detail-text-label">시간표 (글자로 보기)</p>
-          <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
-          <p id="detail-ocr-fallback" class="detail-ocr-fallback" hidden></p>
-          <p id="detail-empty-hint" class="detail-empty-hint" hidden>
-            글자가 비어 있습니다. 아래 「사진 다시 찍기」로 깨끗하게 다시
-            찍어 주세요.
-          </p>
-        </div>
+        <figure class="detail-photo-wrap detail-photo-primary panel-lite">
+          <p class="detail-photo-label">시간표 사진 (기준)</p>
+          <img
+            id="detail-photo"
+            alt="이 정류장 버스 시간표 원본 사진"
+            width="960"
+            height="720"
+            loading="lazy"
+          />
+        </figure>
 
         <div class="detail-status-chrome" aria-live="polite">
           <p id="bus-status" class="bus-status" role="status"></p>
           <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
         </div>
 
-        <details class="original-photo panel-lite">
-          <summary class="original-photo-summary">원본 사진 보기 (보통은 안 봐도 됩니다)</summary>
-          <figure class="detail-photo-wrap">
-            <img
-              id="detail-photo"
-              alt="이 정류장 버스 시간표 원본 사진"
-              width="960"
-              height="720"
-              loading="lazy"
-            />
-          </figure>
-        </details>
+        <div class="detail-text-panel" aria-labelledby="detail-stop-name">
+          <p class="detail-text-label">글자로 보기 (사진과 다를 수 있음)</p>
+          <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
+          <p id="detail-ocr-fallback" class="detail-ocr-fallback" hidden></p>
+          <p id="detail-empty-hint" class="detail-empty-hint" hidden>
+            글자가 비어 있습니다. 위 사진을 보시거나 「사진 다시 찍기」를 이용해
+            주세요.
+          </p>
+        </div>
 
         <div class="helper-actions">
           <button type="button" id="btn-replace-photo" class="big-btn primary">

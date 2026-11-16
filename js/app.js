@@ -19,6 +19,9 @@ const watchedRegistrations = new WeakSet();
 let lastListedBuild = null;
 let registeredTargetBuild = 0;
 
+/** 등록 시 사진만 저장 — 표를 글자로 맞추는 기능은 보장하지 않음 */
+const REGISTER_PHOTO_ONLY = true;
+
 init();
 
 async function init() {
@@ -179,7 +182,7 @@ function getAiSettings() {
     }
   } catch {
   }
-  return { auto: true, endpoint: DEFAULT_AI_ENDPOINT };
+  return { auto: false, endpoint: DEFAULT_AI_ENDPOINT };
 }
 
 function saveAiSettings(settings) {
@@ -381,36 +384,42 @@ async function handleBusPhoto(input) {
   input.value = "";
   if (!file) return;
 
-  if (!navigator.onLine) {
+  if (!REGISTER_PHOTO_ONLY && !navigator.onLine) {
     setBusStatus("사진 읽기는 인터넷이 필요합니다. 와이파이·데이터를 켠 뒤 다시 시도해 주세요.");
     pendingStopAction = null;
     return;
   }
 
-  setBusStatus("사진을 읽고 있습니다. 잠시만 기다려 주세요.");
-  setOcrProgress(true, 0);
+  setBusStatus("사진을 저장합니다. 잠시만 기다려 주세요.");
 
   try {
     const thumb = await compressImageFile(file, 1080);
-    const blob = await fetch(thumb).then((r) => r.blob());
-    const ocr = await recognizeTextFromImage(blob);
-    let text = ocr.text.trim();
-    let ocrSource = "tesseract";
+    let text = "";
+    let sections = [];
+    let ocrSource = "photo";
 
-    if (shouldUseAiRefineOnRegister()) {
-      setBusStatus("인공지능으로 시간표를 읽는 중입니다. 잠시만 기다려 주세요.");
-      const ai = await refineTimetableWithAi(thumb);
-      if (ai?.text) {
-        text = ai.text.trim();
-        ocrSource = "ai";
+    if (!REGISTER_PHOTO_ONLY) {
+      setOcrProgress(true, 0);
+      const blob = await fetch(thumb).then((r) => r.blob());
+      const ocr = await recognizeTextFromImage(blob);
+      text = ocr.text.trim();
+      ocrSource = "tesseract";
+
+      if (shouldUseAiRefineOnRegister()) {
+        setBusStatus("인공지능으로 시간표를 읽는 중입니다. 잠시만 기다려 주세요.");
+        const ai = await refineTimetableWithAi(thumb);
+        if (ai?.text) {
+          text = ai.text.trim();
+          ocrSource = "ai";
+        }
       }
-    }
 
-    let sections = buildSectionsFromOcr(text);
-
-    if (isOcrLowQuality(text)) {
-      text = "";
-      sections = [];
+      sections = buildSectionsFromOcr(text);
+      if (isOcrLowQuality(text)) {
+        text = "";
+        sections = [];
+      }
+      setOcrProgress(false);
     }
 
     pendingStopDraft = {
@@ -429,11 +438,13 @@ async function handleBusPhoto(input) {
     }
 
     setBusStatus(
-      text
-        ? ocrSource.includes("ai")
-          ? "인공지능으로 글자를 읽었습니다. 정류장 이름을 적어 주세요."
-          : "사진에서 글자를 읽었습니다. 정류장 이름을 적어 주세요."
-        : "글자가 잘 안 보입니다. 이름을 적고 저장하면 사진은 그대로 둡니다. 나중에 「사진 다시 찍기」로 깨끗하게 다시 찍어 주세요."
+      REGISTER_PHOTO_ONLY
+        ? "시간표는 사진으로 보시면 됩니다. 정류장 이름을 적어 주세요."
+        : text
+          ? ocrSource.includes("ai")
+            ? "인공지능으로 글자를 읽었습니다. 정류장 이름을 적어 주세요."
+            : "사진에서 글자를 읽었습니다. 정류장 이름을 적어 주세요."
+          : "글자가 잘 안 보입니다. 이름을 적고 저장하면 사진은 그대로 둡니다."
     );
   } catch (error) {
     console.error(error);
@@ -1040,6 +1051,7 @@ function renderStopDetail(stopId) {
   const sectionsRoot = document.querySelector("#detail-sections");
   const fallback = document.querySelector("#detail-ocr-fallback");
   const emptyHint = document.querySelector("#detail-empty-hint");
+  const textPanel = document.querySelector("#detail-text-panel");
   if (title) title.textContent = stop.name;
   if (meta) meta.textContent = `마지막 저장: ${formatStopDate(stop.updatedAt)}`;
   if (img) {
@@ -1052,6 +1064,8 @@ function renderStopDetail(stopId) {
   const hasStructured = sections.some(
     (block) => block.title || block.lines.some((l) => l.trim())
   );
+
+  if (textPanel) textPanel.hidden = !hasStructured;
 
   if (sectionsRoot && hasStructured) {
     sections.forEach((block, blockIndex) => {

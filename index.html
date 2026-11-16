@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#E9EDF0" />
     <meta
       name="description"
-      content="시간표 사진을 등록하면 글자만 크게 읽기 쉽게 보여 주는 내버스시간표"
+      content="정류장별 버스 시간표 사진을 이름 붙여 저장하는 내버스시간표 (글자 자동읽기 보장 없음)"
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -39,8 +39,9 @@
     <div class="wrap bus-wrap">
       <h1 class="app-name" id="app-title">내버스시간표</h1>
       <p class="app-guide" id="app-lede">
-        정류장 <strong>이름</strong>과 <strong>시간표 사진</strong>만 등록하세요.
-        <strong>사진</strong>이 기준이고, 아래 글자는 참고용입니다.
+        이 앱은 <strong>시간표 사진</strong>을 정류장 이름과 함께 저장합니다.
+        표마다 모양이 달라 <strong>글자·시각 자동 맞춤은 하지 못합니다</strong>.
+        보실 때는 <strong>사진</strong>을 보시면 됩니다.
       </p>
 
       <!-- 목록 화면 -->
@@ -113,7 +114,12 @@
           <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
         </div>
 
-        <div class="detail-text-panel" aria-labelledby="detail-stop-name">
+        <div
+          id="detail-text-panel"
+          class="detail-text-panel"
+          aria-labelledby="detail-stop-name"
+          hidden
+        >
           <p class="detail-text-label">글자로 보기 (사진과 다를 수 있음)</p>
           <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
           <p id="detail-ocr-fallback" class="detail-ocr-fallback" hidden></p>

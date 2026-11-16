@@ -566,10 +566,42 @@ function isDirectionHeadingLine(line) {
 }
 
 function cleanMarkdownHeading(text) {
-  return String(text)
-    .trim()
-    .replace(/^#{1,6}\s*/, "")
-    .trim();
+  return String(text).trim().replace(/#{1,6}\s*/g, "").trim();
+}
+
+function extractRouteTitlesFromText(text) {
+  const cleaned = String(text).replace(/#{1,6}\s*/g, " ");
+  return [...cleaned.matchAll(ROUTE_COLUMN_TITLE)].map((m) => m[1].trim());
+}
+
+/** 좌우 2열(→ 머리글 2개·한 줄 시각 2개 등) 표 */
+function textLooksLikeTwoColumnBoard(text) {
+  const routes = extractRouteTitlesFromText(text);
+  if (routes.length >= 2) return true;
+  const lines = splitOcrLines(text);
+  const paired = lines.filter((l) => lineHasPairedBusTimes(l));
+  if (paired.length >= 2) return true;
+  const singles = lines.filter(
+    (l) => countTimeTokens(l) === 1 && !lineHasPairedBusTimes(l)
+  );
+  if (routes.length >= 2 && singles.length >= 4) return true;
+  if (singles.length >= 8 && /→|->|➔/.test(text)) return true;
+  return false;
+}
+
+function structuredParseMergesTwoColumns(text, sections) {
+  if (!sections?.length) return false;
+  const routes = extractRouteTitlesFromText(text);
+  if (routes.length < 2) return false;
+  const timeBlocks = sections.filter((s) =>
+    (s.lines || []).some((l) => countTimeTokens(l) >= 1)
+  );
+  if (timeBlocks.length !== 1) return false;
+  const lines = timeBlocks[0].lines.filter((l) => countTimeTokens(l) >= 1);
+  if (lines.length < 6) return false;
+  const title = timeBlocks[0].title || "";
+  if (/[\/｜|]|##/.test(title)) return true;
+  return lines.length >= 8;
 }
 
 function formatDirectionTitle(title) {
@@ -1169,14 +1201,20 @@ function collectColumnTitlesFromText(rawLines) {
     if (lineLooksLikeTimeValue(line)) continue;
     if (isContactMetaLine(line) || isJunkTimetableHeaderLine(line)) continue;
 
-    const routes = [...line.matchAll(ROUTE_COLUMN_TITLE)];
+    const routes = extractRouteTitlesFromText(line);
     if (routes.length >= 2) {
-      leftTitle = routes[0][1].trim();
-      rightTitle = routes[1][1].trim();
+      leftTitle = routes[0];
+      rightTitle = routes[1];
       break;
     }
-    if (routes.length === 1) {
-      const name = routes[0][1].trim();
+    const inlineRoutes = [...line.matchAll(ROUTE_COLUMN_TITLE)];
+    if (inlineRoutes.length >= 2) {
+      leftTitle = inlineRoutes[0][1].trim();
+      rightTitle = inlineRoutes[1][1].trim();
+      break;
+    }
+    if (inlineRoutes.length === 1) {
+      const name = inlineRoutes[0][1].trim();
       if (!leftTitle) leftTitle = name;
       else if (!rightTitle && name !== leftTitle) rightTitle = name;
     }
@@ -1241,7 +1279,11 @@ function tryReorganizeTwoColumnBoard(text) {
 
   const twoCols = left.length >= 2 && right.length >= 2;
   if (!twoCols) return null;
-  if (pairedRows < 2 && singles.length < 4 && !(leftTitle && rightTitle)) return null;
+
+  const routeHints = extractRouteTitlesFromText(text).length;
+  const hasTwoRoutes =
+    Boolean(leftTitle && rightTitle) || routeHints >= 2 || /→|->|➔/.test(text);
+  if (!hasTwoRoutes && pairedRows < 2 && singles.length < 6) return null;
 
   const sections = [];
   if (placard) sections.push({ title: placard, lines: [] });
@@ -1294,12 +1336,28 @@ function structuredSectionsLackDestinations(sections) {
 
 function buildSectionsFromOcr(text) {
   const structured = parseStructuredTimetableText(text);
-  if (
+  const structuredOk =
     structured?.length &&
-    !structuredSectionsLackDestinations(structured)
-  ) {
+    !structuredSectionsLackDestinations(structured) &&
+    !structuredParseMergesTwoColumns(text, structured);
+
+  const structuredTimeBlocks = (structured || []).filter((s) =>
+    (s.lines || []).some((l) => countTimeTokens(l) >= 1)
+  );
+  if (structuredOk && structuredTimeBlocks.length >= 2) {
     return structured;
   }
+
+  if (
+    textLooksLikeTwoColumnBoard(text) ||
+    structuredParseMergesTwoColumns(text, structured || [])
+  ) {
+    const twoCol = tryReorganizeTwoColumnBoard(text);
+    if (twoCol) return twoCol;
+  }
+
+  if (structuredOk) return structured;
+
   const twoCol = tryReorganizeTwoColumnBoard(text);
   if (twoCol) return twoCol;
   return organizeOcrText(text);

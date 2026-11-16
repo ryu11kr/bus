@@ -19,8 +19,10 @@ const watchedRegistrations = new WeakSet();
 let lastListedBuild = null;
 let registeredTargetBuild = 0;
 
-/** 등록 시 사진만 저장 — 표를 글자로 맞추는 기능은 보장하지 않음 */
+/** 등록 시 사진만 저장 + 기기에서 선명도 보정 */
 const REGISTER_PHOTO_ONLY = true;
+const PHOTO_MAX_WIDTH = 1680;
+const PHOTO_JPEG_QUALITY = 0.9;
 
 init();
 
@@ -64,6 +66,7 @@ function initApp() {
 
   loadBusState();
   bindBusUi();
+  bindPhotoViewer();
   bindAppUpdateUi();
   startLiveClock();
   showListView();
@@ -278,7 +281,7 @@ function bindBusUi() {
         activeStopId = stop.id;
         renderStopDetail(stop.id);
         renderStopList();
-        setBusStatus("사진과 시간표를 갱신했습니다.");
+        setBusStatus("사진을 바꿨습니다.");
       }
     } else if (pendingStopAction === "new" && pendingStopDraft) {
       const stop = createStopFromDraft(pendingStopDraft, name);
@@ -294,6 +297,90 @@ function bindBusUi() {
     pendingStopAction = null;
     replaceStopId = null;
     nameDialog?.close();
+  });
+}
+
+/** 상세 화면 사진 — 전체 화면 확대·스크롤 */
+function bindPhotoViewer() {
+  const dialog = document.querySelector("#photo-viewer");
+  const stage = document.querySelector("#photo-viewer-stage");
+  const img = document.querySelector("#photo-viewer-img");
+  const titleEl = document.querySelector("#photo-viewer-title");
+  const btnClose = document.querySelector("#photo-viewer-close");
+  const btnFit = document.querySelector("#photo-viewer-fit");
+  const btnZoom = document.querySelector("#photo-viewer-zoom-in");
+  const btnExpand = document.querySelector("#btn-expand-photo");
+  if (!dialog || !stage || !img) return;
+
+  /** @type {number} */
+  let zoomFactor = 1;
+  const MAX_ZOOM = 3;
+
+  function stageWidth() {
+    return stage.clientWidth || window.innerWidth;
+  }
+
+  function setZoomFit() {
+    zoomFactor = 1;
+    if (!img.naturalWidth) return;
+    const sw = stageWidth();
+    const scale = sw / img.naturalWidth;
+    img.style.width = `${Math.round(img.naturalWidth * scale)}px`;
+    img.style.height = "auto";
+    stage.scrollTop = 0;
+    stage.scrollLeft = 0;
+  }
+
+  function zoomInStep() {
+    zoomFactor = Math.min(MAX_ZOOM, zoomFactor * 1.35);
+    const baseW = stageWidth();
+    img.style.width = `${Math.round(baseW * zoomFactor)}px`;
+    img.style.height = "auto";
+  }
+
+  function openPhotoViewer() {
+    const stop = getActiveStop();
+    if (!stop?.photoThumb) return;
+    titleEl.textContent = stop.name;
+    img.alt = `${stop.name} 버스 시간표 사진`;
+    img.src = stop.photoThumb;
+    const onReady = () => {
+      setZoomFit();
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      }
+    };
+    if (img.complete && img.naturalWidth > 0) onReady();
+    else img.onload = () => onReady();
+  }
+
+  btnExpand?.addEventListener("click", openPhotoViewer);
+
+  btnClose?.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("cancel", () => {
+    img.onload = null;
+  });
+
+  btnFit?.addEventListener("click", setZoomFit);
+  btnZoom?.addEventListener("click", zoomInStep);
+
+  let lastTap = 0;
+  img.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTap < 320) {
+      if (zoomFactor > 1.05) setZoomFit();
+      else zoomInStep();
+    }
+    lastTap = now;
+  });
+
+  window.addEventListener("resize", () => {
+    if (!dialog.open) return;
+    setZoomFit();
   });
 }
 
@@ -385,15 +472,20 @@ async function handleBusPhoto(input) {
   if (!file) return;
 
   if (!REGISTER_PHOTO_ONLY && !navigator.onLine) {
-    setBusStatus("사진 읽기는 인터넷이 필요합니다. 와이파이·데이터를 켠 뒤 다시 시도해 주세요.");
+    setBusStatus("등록하려면 인터넷이 필요합니다. 와이파이·데이터를 켠 뒤 다시 시도해 주세요.");
     pendingStopAction = null;
     return;
   }
 
-  setBusStatus("사진을 저장합니다. 잠시만 기다려 주세요.");
+  setBusStatus(
+    REGISTER_PHOTO_ONLY
+      ? "사진을 자동으로 최적화하는 중입니다. 잠시만 기다려 주세요."
+      : "사진을 저장합니다. 잠시만 기다려 주세요."
+  );
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
-    const thumb = await compressImageFile(file, 1080);
+    const thumb = await compressImageFile(file, PHOTO_MAX_WIDTH);
     let text = "";
     let sections = [];
     let ocrSource = "photo";
@@ -406,7 +498,7 @@ async function handleBusPhoto(input) {
       ocrSource = "tesseract";
 
       if (shouldUseAiRefineOnRegister()) {
-        setBusStatus("인공지능으로 시간표를 읽는 중입니다. 잠시만 기다려 주세요.");
+        setBusStatus("사진을 저장하는 중입니다. 잠시만 기다려 주세요.");
         const ai = await refineTimetableWithAi(thumb);
         if (ai?.text) {
           text = ai.text.trim();
@@ -437,15 +529,7 @@ async function handleBusPhoto(input) {
       openStopNameDialog("");
     }
 
-    setBusStatus(
-      REGISTER_PHOTO_ONLY
-        ? "시간표는 사진으로 보시면 됩니다. 정류장 이름을 적어 주세요."
-        : text
-          ? ocrSource.includes("ai")
-            ? "인공지능으로 글자를 읽었습니다. 정류장 이름을 적어 주세요."
-            : "사진에서 글자를 읽었습니다. 정류장 이름을 적어 주세요."
-          : "글자가 잘 안 보입니다. 이름을 적고 저장하면 사진은 그대로 둡니다."
-    );
+    setBusStatus("정류장 이름을 적어 주세요.");
   } catch (error) {
     console.error(error);
     setBusStatus("사진 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.");
@@ -521,15 +605,11 @@ function renderStopList() {
     name.className = "stop-card-name";
     name.textContent = stop.name;
 
-    const preview = document.createElement("span");
-    preview.className = "stop-card-preview";
-    preview.textContent = getStopPreviewLine(stop);
-
     const meta = document.createElement("span");
     meta.className = "stop-card-meta";
     meta.textContent = formatStopDate(stop.updatedAt);
 
-    btn.append(name, preview, meta);
+    btn.append(name, meta);
     btn.addEventListener("click", () => {
       activeStopId = stop.id;
       renderStopDetail(stop.id);
@@ -537,19 +617,6 @@ function renderStopList() {
     li.append(btn);
     list.append(li);
   }
-}
-
-function getStopPreviewLine(stop) {
-  if (stop.sections?.length) {
-    const block = stop.sections[0];
-    if (block.title) return block.title;
-    if (block.lines?.[0]) return block.lines[0];
-  }
-  const line = stop.ocrText
-    ?.split(/\r?\n/)
-    .map((l) => l.trim())
-    .find(Boolean);
-  return line || "글자를 읽는 중…";
 }
 
 function lineDisplayClass(line) {
@@ -1048,106 +1115,12 @@ function renderStopDetail(stopId) {
   const title = document.querySelector("#detail-stop-name");
   const meta = document.querySelector("#detail-updated");
   const img = document.querySelector("#detail-photo");
-  const sectionsRoot = document.querySelector("#detail-sections");
-  const fallback = document.querySelector("#detail-ocr-fallback");
-  const emptyHint = document.querySelector("#detail-empty-hint");
-  const textPanel = document.querySelector("#detail-text-panel");
   if (title) title.textContent = stop.name;
   if (meta) meta.textContent = `마지막 저장: ${formatStopDate(stop.updatedAt)}`;
   if (img) {
     img.src = stop.photoThumb;
     img.alt = `${stop.name} 버스 시간표 원본 사진`;
   }
-  sectionsRoot?.replaceChildren();
-  clearNextBusHighlights();
-  const sections = getStopSections(stop);
-  const hasStructured = sections.some(
-    (block) => block.title || block.lines.some((l) => l.trim())
-  );
-
-  if (textPanel) textPanel.hidden = !hasStructured;
-
-  if (sectionsRoot && hasStructured) {
-    sections.forEach((block, blockIndex) => {
-      if (!block.title && !block.lines.length) return;
-      const section = document.createElement("section");
-      const isDirection = isDirectionBlockTitle(block.title);
-      const isPlacard =
-        Boolean(block.title) &&
-        isDirectionBlockTitle(block.title) === false &&
-        !block.lines.some((l) => parseMinutesFromLine(l) != null);
-      section.className = "ocr-block";
-      if (isDirection) section.classList.add("ocr-block-direction");
-      if (isPlacard && !isDirection) section.classList.add("ocr-block-placard");
-      section.dataset.blockIndex = String(blockIndex);
-      if (block.title) {
-        const heading = document.createElement("h3");
-        heading.className = "ocr-block-title";
-        heading.textContent = isDirection
-          ? formatDirectionTitle(block.title)
-          : cleanMarkdownHeading(block.title);
-        section.append(heading);
-      }
-
-      let groupIndex = 0;
-      let timesInGroup = false;
-      let colheadDone = false;
-      const useTableLayout = blockUsesTableLayout(block.lines);
-      const ul = document.createElement("ul");
-      ul.className = useTableLayout
-        ? "ocr-block-lines ocr-block-lines--table"
-        : "ocr-block-lines";
-
-      for (const line of block.lines) {
-        if (isDirectionHeadingLine(line)) continue;
-        if (
-          block.title &&
-          compactKoreanLine(line) === compactKoreanLine(block.title) &&
-          isDirectionBlockTitle(block.title)
-        ) {
-          continue;
-        }
-        if (useTableLayout && isTableColumnHeader(line)) {
-          if (colheadDone) continue;
-          colheadDone = true;
-        }
-        if (isRouteHeaderLine(line)) {
-          if (timesInGroup) {
-            groupIndex += 1;
-            timesInGroup = false;
-          }
-          const li = document.createElement("li");
-          li.className = lineDisplayClass(line);
-          li.textContent = line;
-          li.dataset.blockIndex = String(blockIndex);
-          li.dataset.groupIndex = String(groupIndex);
-          ul.append(li);
-          continue;
-        }
-
-        const li = buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout);
-        if (parseMinutesFromLine(line) != null) timesInGroup = true;
-        ul.append(li);
-      }
-
-      if (ul.childElementCount) section.append(ul);
-      sectionsRoot.append(section);
-    });
-    if (fallback) fallback.hidden = true;
-    if (emptyHint) emptyHint.hidden = true;
-  } else if (stop.ocrText?.trim() && fallback) {
-    fallback.hidden = false;
-    fallback.textContent = stop.ocrText.trim();
-    if (emptyHint) emptyHint.hidden = true;
-  } else {
-    if (fallback) {
-      fallback.hidden = true;
-      fallback.textContent = "";
-    }
-    if (emptyHint) emptyHint.hidden = false;
-  }
-
-  refreshActiveStopNextBus();
   setBusStatus("");
 }
 
@@ -1276,6 +1249,11 @@ function isLikelySectionTitle(line) {
   return false;
 }
 
+/**
+ * 저장용 사진: 크기 맞춤 + 대비·선명 보정 (OCR 없음)
+ * @param {File} file
+ * @param {number} maxWidth
+ */
 async function compressImageFile(file, maxWidth) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxWidth / bitmap.width);
@@ -1286,8 +1264,70 @@ async function compressImageFile(file, maxWidth) {
   canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  if (REGISTER_PHOTO_ONLY) {
+    autoOptimizePhotoOnCanvas(ctx, w, h);
+  }
+  return canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+}
+
+/** 밝기에 맞춰 대비·선명도 자동 조절 (사용자 설정 없음) */
+/** @param {CanvasRenderingContext2D} ctx */
+function autoOptimizePhotoOnCanvas(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const px = imageData.data;
+  let lumSum = 0;
+  let samples = 0;
+  for (let i = 0; i < px.length; i += 16) {
+    lumSum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    samples += 1;
+  }
+  const meanLum = samples ? lumSum / samples : 128;
+  let contrast = 1.12;
+  let brightness = 6;
+  let sharpen = 0.42;
+  if (meanLum < 95) {
+    contrast = 1.2;
+    brightness = 16;
+    sharpen = 0.38;
+  } else if (meanLum > 175) {
+    contrast = 1.08;
+    brightness = -2;
+    sharpen = 0.35;
+  }
+  for (let i = 0; i < px.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      let v = (px[i + c] - 128) * contrast + 128 + brightness;
+      px[i + c] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+  }
+  sharpenRgbInPlace(px, width, height, sharpen);
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * @param {Uint8ClampedArray} pixels
+ * @param {number} width
+ * @param {number} height
+ * @param {number} strength
+ */
+function sharpenRgbInPlace(pixels, width, height, strength) {
+  const src = new Uint8ClampedArray(pixels);
+  const row = width * 4;
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * row + x * 4;
+      for (let c = 0; c < 3; c++) {
+        const center = src[i + c];
+        const neighbors =
+          src[i + c - row] + src[i + c + row] + src[i + c - 4] + src[i + c + 4];
+        const v = center + strength * (4 * center - neighbors);
+        pixels[i + c] = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
+      }
+    }
+  }
 }
 
 async function loadTesseract() {
@@ -1425,23 +1465,18 @@ async function refineTimetableWithAi(dataUrl) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      let msg = payload?.error || `정밀 읽기 실패 (${response.status})`;
-      if (/no longer available|models\/gemini/i.test(msg)) {
-        msg =
-          "인공지능 모델이 갱신되었습니다. 앱을 새로고침하고 다시 시도해 주세요. 계속되면 잠시 뒤 다시 배포된 버전으로 시도하세요.";
-      }
-      setBusStatus(msg);
+      setBusStatus("처리하지 못했습니다. 사진만 이용해 주세요.");
       return null;
     }
     if (typeof payload.text === "string" && payload.text.trim()) {
       return { text: payload.text };
     }
-    setBusStatus("인공지능이 글자를 찾지 못했습니다.");
+    setBusStatus("처리하지 못했습니다. 사진만 다시 등록해 주세요.");
     return null;
   } catch (error) {
     console.error(error);
     setBusStatus(
-      "정밀 읽기 서버에 연결하지 못했습니다. Vercel 배포와 GEMINI_API_KEY 설정을 확인하세요."
+      "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
     );
     return null;
   } finally {

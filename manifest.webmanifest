@@ -2,7 +2,7 @@
     "id":  "./",
     "name":  "내버스시간표",
     "short_name":  "내버스시간표",
-    "description":  "정류장마다 이름을 붙여 시간표 사진을 저장하고 사진 속 내용을 정리해 보여 주는 앱",
+    "description":  "정류장 시간표 사진을 자동 최적화해 저장하고 화면 가득 확대해 보는 앱",
     "lang":  "ko",
     "dir":  "ltr",
     "start_url":  "./?source=pwa",

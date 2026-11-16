@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#E9EDF0" />
     <meta
       name="description"
-      content="정류장별 버스 시간표 사진을 이름 붙여 저장하는 내버스시간표 (글자 자동읽기 보장 없음)"
+      content="정류장 시간표 사진 자동 최적화 저장 · 화면 가득 확대 보기"
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -39,9 +39,9 @@
     <div class="wrap bus-wrap">
       <h1 class="app-name" id="app-title">내버스시간표</h1>
       <p class="app-guide" id="app-lede">
-        이 앱은 <strong>시간표 사진</strong>을 정류장 이름과 함께 저장합니다.
-        표마다 모양이 달라 <strong>글자·시각 자동 맞춤은 하지 못합니다</strong>.
-        보실 때는 <strong>사진</strong>을 보시면 됩니다.
+        정류장 <strong>이름</strong>과 <strong>시간표 사진</strong>을 한곳에
+        저장해 두세요. 등록하면 사진을 <strong>자동으로 최적화</strong>해 저장하고,
+        보기 때는 화면 <strong>가득 확대</strong>해서 볼 수 있습니다.
       </p>
 
       <!-- 목록 화면 -->
@@ -60,13 +60,13 @@
                 width="640"
                 height="960"
                 loading="lazy"
-                alt="촬영 예시: 정류장 시간표 전체가 화면에 들어오고 시각·글자가 크게 보이는 사진"
+                alt="촬영 예시: 정류장 시간표가 화면에 크게 들어오는 사진"
               />
             </figure>
             <ul class="home-more-list">
-              <li>시각·숫자가 휴대폰 화면에 <strong>크게</strong> 보이게 가까이 찍어 주세요.</li>
-              <li>흐림·빛 반사가 없도록 해 주세요.</li>
-              <li>복잡한 표는 표 출력에 한계가 있습니다.</li>
+              <li>시간표가 화면에 <strong>크게</strong> 들어오게 가까이 찍어 주세요.</li>
+              <li>저장 시 <strong>자동 최적화</strong>합니다. 밝고 흔들림 없이 찍을수록 좋습니다.</li>
+              <li>볼 때 <strong>「더 크게」</strong>로 확대하고 손가락으로 밀어 세부를 볼 수 있습니다.</li>
             </ul>
           </details>
 
@@ -83,13 +83,6 @@
           </div>
           <p id="install-hint" class="install-hint"></p>
           <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
-          <progress
-            id="ocr-progress-list"
-            class="ocr-progress"
-            value="0"
-            max="100"
-            hidden
-          ></progress>
         </div>
       </section>
 
@@ -99,34 +92,26 @@
         <p id="detail-updated" class="detail-meta"></p>
 
         <figure class="detail-photo-wrap detail-photo-primary panel-lite">
-          <p class="detail-photo-label">시간표 사진 (기준)</p>
-          <img
-            id="detail-photo"
-            alt="이 정류장 버스 시간표 원본 사진"
-            width="960"
-            height="720"
-            loading="lazy"
-          />
+          <p class="detail-photo-label">시간표 사진</p>
+          <button
+            type="button"
+            id="btn-expand-photo"
+            class="detail-photo-hit"
+            aria-label="시간표 사진 크게 보기"
+          >
+            <img
+              id="detail-photo"
+              alt="이 정류장 버스 시간표 사진"
+              width="960"
+              height="720"
+              loading="lazy"
+            />
+          </button>
+          <p class="detail-photo-hint">사진을 누르면 화면 가득 크게 볼 수 있습니다</p>
         </figure>
 
         <div class="detail-status-chrome" aria-live="polite">
           <p id="bus-status" class="bus-status" role="status"></p>
-          <progress id="ocr-progress" class="ocr-progress" value="0" max="100" hidden></progress>
-        </div>
-
-        <div
-          id="detail-text-panel"
-          class="detail-text-panel"
-          aria-labelledby="detail-stop-name"
-          hidden
-        >
-          <p class="detail-text-label">글자로 보기 (사진과 다를 수 있음)</p>
-          <div id="detail-sections" class="detail-sections" aria-live="polite"></div>
-          <p id="detail-ocr-fallback" class="detail-ocr-fallback" hidden></p>
-          <p id="detail-empty-hint" class="detail-empty-hint" hidden>
-            글자가 비어 있습니다. 위 사진을 보시거나 「사진 다시 찍기」를 이용해
-            주세요.
-          </p>
         </div>
 
         <div class="helper-actions">
@@ -172,6 +157,32 @@
         <button id="refresh-cache" type="button" hidden></button>
         <ul id="cache-list" hidden></ul>
       </section>
+
+      <dialog
+        id="photo-viewer"
+        class="photo-viewer"
+        aria-labelledby="photo-viewer-title"
+        aria-modal="true"
+      >
+        <header class="photo-viewer-head">
+          <p id="photo-viewer-title" class="photo-viewer-title"></p>
+          <button type="button" id="photo-viewer-close" class="photo-viewer-close big-btn primary">
+            닫기
+          </button>
+        </header>
+        <div id="photo-viewer-stage" class="photo-viewer-stage" tabindex="-1">
+          <img id="photo-viewer-img" class="photo-viewer-img" alt="" decoding="async" />
+        </div>
+        <div class="photo-viewer-actions">
+          <button type="button" id="photo-viewer-fit" class="big-btn secondary">
+            화면에 맞춤
+          </button>
+          <button type="button" id="photo-viewer-zoom-in" class="big-btn secondary">
+            더 크게
+          </button>
+        </div>
+        <p class="photo-viewer-hint">두 번 누르면 확대·맞춤이 바뀝니다. 밀어서 시간을 확인하세요.</p>
+      </dialog>
 
       <dialog id="stop-name-dialog" class="add-time-dialog" aria-labelledby="stop-name-title">
         <form id="stop-name-form" method="dialog">

@@ -945,10 +945,35 @@ footer {
   margin: 0.75rem 0 0;
 }
 
+.detail-photo-hit {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 0.85rem;
+}
+
+.detail-photo-hit:focus-visible {
+  outline: 3px solid #0284c7;
+  outline-offset: 3px;
+}
+
 .detail-photo-wrap img {
   width: 100%;
   border-radius: 0.85rem;
   border: 2px solid var(--line);
+  pointer-events: none;
+}
+
+.detail-photo-hint {
+  margin: 0.65rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
 }
 
 .detail-sections {
@@ -1187,4 +1212,95 @@ footer {
   margin: 0.75rem 0 0;
   font-size: 1rem;
   line-height: 1.45;
+}
+
+.photo-viewer {
+  margin: 0;
+  padding: 0;
+  border: none;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  height: 100dvh;
+  background: #0f1419;
+  color: #fff;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.photo-viewer[open] {
+  display: flex;
+}
+
+.photo-viewer::backdrop {
+  background: #0a0a0a;
+}
+
+.photo-viewer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  justify-content: space-between;
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.85rem 0.65rem;
+  background: #1a222b;
+  border-bottom: 2px solid #2d3847;
+}
+
+.photo-viewer-title {
+  flex: 1 1 12rem;
+  margin: 0;
+  font-size: clamp(1.2rem, 4.5vw, 1.45rem);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.photo-viewer-close {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+}
+
+.photo-viewer-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  background: #0a0a0a;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0.35rem;
+}
+
+.photo-viewer-img {
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.photo-viewer-actions {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  background: #1a222b;
+  border-top: 2px solid #2d3847;
+}
+
+.photo-viewer-actions .big-btn {
+  flex: 1 1 0;
+}
+
+.photo-viewer-hint {
+  margin: 0;
+  padding: 0.55rem 0.85rem max(0.85rem, env(safe-area-inset-bottom));
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+  color: #cbd5e1;
+  background: #141a22;
 }

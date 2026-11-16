@@ -4,7 +4,7 @@
  * 환경 변수 (Vercel → Settings → Environment Variables):
  *   GEMINI_API_KEY       — Google AI Studio API 키 (필수)
  *   GEMINI_MODEL         — 기본 gemini-3.5-flash-lite (신규 API 키용)
- *   APP_DAILY_AI_LIMIT   — 이 앱에서 허용할 일일 정밀 읽기 횟수 (기본 50)
+ *   APP_DAILY_AI_LIMIT   — 앱 일일 정밀 읽기 상한 (기본 200, 0=제한 없음)
  *   KV_REST_API_URL      — (선택) Vercel KV / Upstash — 일일 카운트 정확 추적
  *   KV_REST_API_TOKEN
  */
@@ -16,6 +16,14 @@ const PROMPT = `당신은 시골 버스 정류장 시간표 사진을 옮기는 
 - 노선 번호, 평일/주말, 방향, 시각은 원본 순서를 유지하세요.
 - 표가 복잡해도 줄바꿈으로 구분해 주세요.
 - 추측이나 설명, "안내 문구"는 쓰지 마세요. 읽히는 글자만 출력하세요.`;
+
+function resolveAppDailyLimit() {
+  const raw = process.env.APP_DAILY_AI_LIMIT;
+  if (raw === "0" || raw === "off" || raw === "none") return 0;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return 200;
+}
 
 function parseDataUrl(dataUrl) {
   const match = dataUrl.match(/^data:(image\/[\w+.-]+);base64,(.+)$/);
@@ -72,7 +80,7 @@ export default async function handler(req, res) {
   }
 
   const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-  const appLimit = Math.max(1, Number(process.env.APP_DAILY_AI_LIMIT) || 50);
+  const appLimit = resolveAppDailyLimit();
 
   if (req.method === "GET") {
     const quota = await getDailyQuotaStatus(appLimit);

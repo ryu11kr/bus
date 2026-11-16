@@ -124,9 +124,14 @@ async function refreshAiQuotaUi() {
     }
     const q = data.quota;
     const model = data.model || "gemini";
-    const limit = q?.limit ?? data.appDailyLimit ?? "?";
+    const limit = q?.limit ?? data.appDailyLimit;
+    const used = q?.used ?? 0;
+    if (q?.unlimited || limit === 0) {
+      el.textContent = `정밀 읽기: 앱 일일 제한 없음 (오늘 ${used}회 사용, ${model}). Google 무료 한도만 적용됩니다.`;
+      return;
+    }
     const remaining = q?.remaining ?? "?";
-    el.textContent = `오늘 정밀 읽기(앱): ${remaining}회 남음 / 하루 ${limit}회 (${model}). Google 전체 무료 한도는 프로젝트·모델마다 따로 있습니다.`;
+    el.textContent = `오늘 정밀 읽기(앱): ${remaining}회 남음 / 하루 ${limit}회 (${model}). Google 무료 한도는 별도입니다.`;
   } catch {
     el.textContent = "배포 주소에서만 정밀 읽기 한도를 표시합니다.";
   }

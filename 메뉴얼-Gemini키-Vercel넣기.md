@@ -46,7 +46,7 @@ Google 화면에 “무료” / Free tier 안내가 보이면 그대로 진행�
 | Name | Value (예시) |
 |------|----------------|
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` (기본과 같으면 생략. 2.5-flash-lite는 신규 키 불가) |
-| `APP_DAILY_AI_LIMIT` | `50` (하루 정밀 읽기 최대 횟수) |
+| `APP_DAILY_AI_LIMIT` | `200` (기본). 부족하면 `0` = 앱 제한 없음 |
 
 ---
 

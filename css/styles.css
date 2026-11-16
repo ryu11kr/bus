@@ -496,11 +496,30 @@ footer {
   margin: 0 0 1.15rem;
   padding: 0.85rem 1rem;
   font-size: 1.1rem;
-  line-height: 1.55;
-  text-align: center;
+  line-height: 1.65;
+  text-align: left;
+  text-wrap: pretty;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 1rem;
+}
+
+.app-guide br {
+  display: none;
+}
+
+@media (max-width: 28rem) {
+  .app-guide {
+    font-size: 1.05rem;
+  }
+
+  .app-guide br {
+    display: block;
+    content: "";
+    margin-top: 0.35rem;
+  }
 }
 
 .list-action-panel {
@@ -945,25 +964,29 @@ footer {
   margin: 0.75rem 0 0;
 }
 
-.detail-photo-hit {
+body.bus-app button.detail-photo-hit {
   display: block;
   width: 100%;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: none;
-  background: transparent;
-  cursor: pointer;
   border-radius: 0.85rem;
+  background: transparent;
+  color: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  overflow: hidden;
 }
 
-.detail-photo-hit:focus-visible {
+body.bus-app button.detail-photo-hit:focus-visible {
   outline: 3px solid #0284c7;
   outline-offset: 3px;
 }
 
 .detail-photo-wrap img {
   width: 100%;
-  border-radius: 0.85rem;
+  border-radius: 0;
   border: 2px solid var(--line);
   pointer-events: none;
 }
@@ -972,6 +995,9 @@ footer {
   margin: 0.65rem 0 0;
   font-size: 1.05rem;
   font-weight: 600;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: var(--muted);
   text-align: center;
 }

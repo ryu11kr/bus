@@ -79,9 +79,7 @@ function initApp() {
 }
 
 const APP_VERSION_SEEN_KEY = "bus-app-version-seen-build";
-const AUTO_UPDATE_ATTEMPT_KEY = "bus-auto-update-build";
 let appVersionPollId = null;
-let autoUpdateTimerId = null;
 
 function bindAppUpdateUi() {
   document.querySelector("#app-update-apply")?.addEventListener("click", () => {
@@ -179,37 +177,6 @@ async function checkAppVersionUpdate() {
   }
 }
 
-function scheduleAutoAppUpdate(meta) {
-  if (!document.body.classList.contains("bus-app") || photoPipelineBusy) return;
-  const build = meta?.build;
-  if (build == null) return;
-  if (sessionStorage.getItem(AUTO_UPDATE_ATTEMPT_KEY) === String(build)) return;
-  if (autoUpdateTimerId) return;
-
-  const sub = document.querySelector(".app-update-banner-sub");
-  const defaultSub =
-    "업데이트를 누르면 최신 화면으로 바뀝니다. 정류장·구글 로그인은 그대로입니다.";
-  if (sub) {
-    sub.textContent =
-      "잠시 후 자동으로 최신 화면으로 바뀝니다. (정류장·구글 로그인은 그대로)";
-  }
-
-  autoUpdateTimerId = window.setTimeout(() => {
-    autoUpdateTimerId = null;
-    if (photoPipelineBusy) {
-      if (sub) sub.textContent = defaultSub;
-      return;
-    }
-    const banner = document.querySelector("#app-update-banner");
-    if (!banner || banner.hidden) {
-      if (sub) sub.textContent = defaultSub;
-      return;
-    }
-    sessionStorage.setItem(AUTO_UPDATE_ATTEMPT_KEY, String(build));
-    applyAppUpdate();
-  }, 6000);
-}
-
 async function purgeInstalledAppCaches() {
   if (!("caches" in window)) return;
   const prefix = cachePrefix();
@@ -246,19 +213,12 @@ function showAppUpdateBanner(meta) {
   }
   setBusStatus("");
   syncServiceWorker().catch(() => {});
-  scheduleAutoAppUpdate(meta);
 }
 
 async function applyAppUpdate() {
-  if (autoUpdateTimerId) {
-    clearTimeout(autoUpdateTimerId);
-    autoUpdateTimerId = null;
-  }
-
   const banner = document.querySelector("#app-update-banner");
   const pending = banner?.dataset.pendingBuild;
   const pendingSha = banner?.dataset.pendingSha;
-  if (pending) sessionStorage.setItem(AUTO_UPDATE_ATTEMPT_KEY, String(pending));
 
   await purgeInstalledAppCaches();
 

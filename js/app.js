@@ -610,16 +610,15 @@ function bindPhotoViewer() {
       0,
       photos.findIndex((p) => p.id === photo.id)
     );
-    const label = displayPhotoLabel(photo, index);
-    if (stopNameEl) stopNameEl.textContent = stop.name;
+    const hasLabel = photoHasCustomLabel(photo);
+    const label = hasLabel ? displayPhotoLabel(photo, index) : "버스 번호·애칭 적기";
+    if (stopNameEl) {
+      stopNameEl.textContent = label;
+      stopNameEl.classList.toggle("is-placeholder", !hasLabel);
+    }
     if (photoLabelEl) {
-      if (photos.length > 1) {
-        photoLabelEl.textContent = label;
-        photoLabelEl.hidden = false;
-      } else {
-        photoLabelEl.textContent = "";
-        photoLabelEl.hidden = true;
-      }
+      photoLabelEl.textContent = "";
+      photoLabelEl.hidden = true;
     }
     img.alt = `${stop.name} ${label} 시간표`;
     const src = photo.photoThumb;

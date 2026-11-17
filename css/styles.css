@@ -744,6 +744,20 @@ footer {
   padding: 0.65rem 0.5rem;
 }
 
+.bus-share-popup {
+  width: min(24rem, calc(100% - 1.5rem));
+}
+
+.bus-share-popup #bus-share-popup-body {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.bus-share-popup-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
 .photo-guide-figure {
   margin: 0.75rem 0 0;
 }

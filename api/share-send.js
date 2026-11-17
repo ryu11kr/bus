@@ -74,8 +74,8 @@ export default async function handler(req, res) {
 
   const pushResult = await sendSharePushToEmail(admin, toEmail, {
     title: "내버스시간표",
-    body: `${fromEmail} 님이 정류장 정보를 공유했습니다.`,
-    url: "/?share=pending",
+    body: `${fromEmail} 님이 버스 정류장 정보를 공유했습니다.`,
+    url: `/?share=pending&requestId=${row.id}`,
     requestId: row.id,
   });
 

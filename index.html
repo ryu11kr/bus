@@ -342,6 +342,21 @@
     />
 
     <dialog
+      id="bus-share-popup"
+      class="add-time-dialog bus-share-popup"
+      aria-labelledby="bus-share-popup-title"
+      aria-describedby="bus-share-popup-body"
+    >
+      <h2 id="bus-share-popup-title">버스 정류장 공유</h2>
+      <p id="bus-share-popup-body" class="dialog-help"></p>
+      <div class="dialog-actions bus-share-popup-actions">
+        <button type="button" id="bus-share-popup-accept" class="big-btn primary">수락</button>
+        <button type="button" id="bus-share-popup-reject" class="big-btn ghost">거절</button>
+        <button type="button" id="bus-share-popup-later" class="big-btn ghost">나중에</button>
+      </div>
+    </dialog>
+
+    <dialog
       id="photo-viewer"
       class="photo-viewer"
       aria-labelledby="photo-viewer-title"

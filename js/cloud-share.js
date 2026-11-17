@@ -5,6 +5,11 @@ import { pushLocalStateToCloud, runFullCloudSync } from "./cloud-sync-data.js";
 let shareUiBound = false;
 
 const PUSH_OK_STORAGE = "bus-share-push-enabled";
+const SHARE_POPUP_DISMISSED_KEY = "bus-share-popup-dismissed";
+
+/** @type {{ id: string, from_email: string } | null} */
+let popupCurrentRequest = null;
+let sharePopupBound = false;
 
 function normalizeEmail(email) {
   let raw = String(email || "")
@@ -260,18 +265,211 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   return true;
 }
 
+function getDismissedPopupIds() {
+  try {
+    const raw = sessionStorage.getItem(SHARE_POPUP_DISMISSED_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markPopupDismissed(requestId) {
+  const s = getDismissedPopupIds();
+  s.add(String(requestId));
+  try {
+    sessionStorage.setItem(SHARE_POPUP_DISMISSED_KEY, JSON.stringify([...s]));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {string} userEmail
+ * @param {HTMLElement | null} listEl
+ * @param {(text: string) => void} setStatus
+ * @param {string} requestId
+ */
+async function acceptShareRequest(client, userEmail, listEl, setStatus, requestId) {
+  setStatus?.("정류장을 가져오는 중…");
+  try {
+    await authFetch("share-accept", {
+      method: "POST",
+      body: JSON.stringify({ requestId }),
+    });
+  } catch (accErr) {
+    if (accErr.code === "server_not_configured") {
+      throw Object.assign(new Error("server_not_configured"), accErr);
+    }
+    throw accErr;
+  }
+  const userId = (await client.auth.getSession()).data.session?.user?.id;
+  if (userId) {
+    await runFullCloudSync(client, userId);
+  }
+  markPopupDismissed(requestId);
+  setStatus?.("공유한 정류장을 내 목록에 반영했습니다.");
+  await refreshIncomingShareRequests(client, userEmail, listEl, setStatus, requestId);
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {string} userEmail
+ * @param {HTMLElement | null} listEl
+ * @param {(text: string) => void} setStatus
+ * @param {string} requestId
+ */
+async function rejectShareRequest(client, userEmail, listEl, setStatus, requestId) {
+  await authFetch("share-reject", {
+    method: "POST",
+    body: JSON.stringify({ requestId }),
+  });
+  markPopupDismissed(requestId);
+  await refreshIncomingShareRequests(client, userEmail, listEl, setStatus, requestId);
+}
+
+/**
+ * @param {Array<{ id: string, from_email: string }>} pendingRows
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {string} userEmail
+ * @param {HTMLElement | null} listEl
+ * @param {(text: string) => void} setStatus
+ * @param {string | null} preferRequestId
+ */
+function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, preferRequestId) {
+  const dialog = document.querySelector("#bus-share-popup");
+  const bodyEl = document.querySelector("#bus-share-popup-body");
+  if (!dialog || !bodyEl || !pendingRows?.length) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const forceFromUrl = params.get("share") === "pending";
+  const urlRequestId = params.get("requestId");
+  const targetId = preferRequestId || urlRequestId;
+  const dismissed = getDismissedPopupIds();
+
+  let row = null;
+  if (targetId) {
+    row = pendingRows.find((r) => String(r.id) === String(targetId)) || null;
+  }
+  if (!row && forceFromUrl) {
+    row = pendingRows[0];
+  }
+  if (!row) {
+    row = pendingRows.find((r) => !dismissed.has(String(r.id))) || null;
+  }
+  if (!row) return;
+  if (dialog.open && popupCurrentRequest?.id === row.id) return;
+
+  popupCurrentRequest = { id: String(row.id), from_email: row.from_email };
+  bodyEl.textContent = `${row.from_email} 님이 버스 정류장 정보를 공유했습니다.`;
+  bindSharePopupOnce(client, userEmail, listEl, setStatus);
+  dialog.showModal();
+
+  const teaser = document.querySelector("#cloud-sync-teaser");
+  if (teaser && !teaser.open) {
+    teaser.open = true;
+  }
+
+  if (forceFromUrl || urlRequestId) {
+    try {
+      params.delete("share");
+      params.delete("requestId");
+      const q = params.toString();
+      const path = `${window.location.pathname}${q ? `?${q}` : ""}`;
+      window.history.replaceState({}, document.title, path);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function bindSharePopupOnce(client, userEmail, listEl, setStatus) {
+  if (sharePopupBound) return;
+  sharePopupBound = true;
+
+  const dialog = document.querySelector("#bus-share-popup");
+  const acceptBtn = document.querySelector("#bus-share-popup-accept");
+  const rejectBtn = document.querySelector("#bus-share-popup-reject");
+  const laterBtn = document.querySelector("#bus-share-popup-later");
+  if (!dialog || !acceptBtn || !rejectBtn || !laterBtn) return;
+
+  const closeDialog = () => {
+    if (dialog.open) dialog.close();
+    popupCurrentRequest = null;
+  };
+
+  laterBtn.addEventListener("click", () => {
+    if (popupCurrentRequest?.id) markPopupDismissed(popupCurrentRequest.id);
+    closeDialog();
+  });
+
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    if (popupCurrentRequest?.id) markPopupDismissed(popupCurrentRequest.id);
+    closeDialog();
+  });
+
+  acceptBtn.addEventListener("click", async () => {
+    if (!popupCurrentRequest?.id) return;
+    const requestId = popupCurrentRequest.id;
+    acceptBtn.disabled = true;
+    rejectBtn.disabled = true;
+    laterBtn.disabled = true;
+    try {
+      await acceptShareRequest(client, userEmail, listEl, setStatus, requestId);
+      closeDialog();
+    } catch (err) {
+      console.error(err);
+      setStatus?.(describeShareError(err));
+    } finally {
+      acceptBtn.disabled = false;
+      rejectBtn.disabled = false;
+      laterBtn.disabled = false;
+    }
+  });
+
+  rejectBtn.addEventListener("click", async () => {
+    if (!popupCurrentRequest?.id) return;
+    const requestId = popupCurrentRequest.id;
+    acceptBtn.disabled = true;
+    rejectBtn.disabled = true;
+    laterBtn.disabled = true;
+    try {
+      await rejectShareRequest(client, userEmail, listEl, setStatus, requestId);
+      closeDialog();
+    } catch (err) {
+      console.error(err);
+      setStatus?.("거절하지 못했습니다.");
+    } finally {
+      acceptBtn.disabled = false;
+      rejectBtn.disabled = false;
+      laterBtn.disabled = false;
+    }
+  });
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {string} userEmail
  * @param {HTMLElement} listEl
  * @param {(text: string) => void} setStatus
+ * @param {string | null} [preferRequestId]
  */
-export async function refreshIncomingShareRequests(client, userEmail, listEl, setStatus) {
-  if (!listEl) return;
+export async function refreshIncomingShareRequests(
+  client,
+  userEmail,
+  listEl,
+  setStatus,
+  preferRequestId = null
+) {
   const email = normalizeEmail(userEmail);
   if (!email) {
-    listEl.hidden = true;
-    listEl.replaceChildren();
+    if (listEl) {
+      listEl.hidden = true;
+      listEl.replaceChildren();
+    }
     return;
   }
 
@@ -288,13 +486,23 @@ export async function refreshIncomingShareRequests(client, userEmail, listEl, se
     return;
   }
 
-  listEl.replaceChildren();
+  if (listEl) {
+    listEl.replaceChildren();
+    if (!data?.length) {
+      listEl.hidden = true;
+      maybeShowSharePopup([], client, userEmail, listEl, setStatus, preferRequestId);
+      return;
+    }
+    listEl.hidden = false;
+  }
+
   if (!data?.length) {
-    listEl.hidden = true;
     return;
   }
 
-  listEl.hidden = false;
+  maybeShowSharePopup(data, client, userEmail, listEl, setStatus, preferRequestId);
+
+  if (!listEl) return;
   for (const row of data) {
     const card = document.createElement("div");
     card.className = "bus-share-incoming-card";
@@ -320,25 +528,8 @@ export async function refreshIncomingShareRequests(client, userEmail, listEl, se
     acceptBtn.addEventListener("click", async () => {
       acceptBtn.disabled = true;
       rejectBtn.disabled = true;
-      setStatus?.("정류장을 가져오는 중…");
       try {
-        try {
-          await authFetch("share-accept", {
-            method: "POST",
-            body: JSON.stringify({ requestId: row.id }),
-          });
-        } catch (accErr) {
-          if (accErr.code === "server_not_configured") {
-            throw Object.assign(new Error("server_not_configured"), accErr);
-          }
-          throw accErr;
-        }
-        const userId = (await client.auth.getSession()).data.session?.user?.id;
-        if (userId) {
-          await runFullCloudSync(client, userId);
-        }
-        setStatus?.("공유한 정류장을 내 목록에 반영했습니다.");
-        await refreshIncomingShareRequests(client, userEmail, listEl, setStatus);
+        await acceptShareRequest(client, userEmail, listEl, setStatus, row.id);
       } catch (err) {
         console.error(err);
         setStatus?.(describeShareError(err));
@@ -351,11 +542,7 @@ export async function refreshIncomingShareRequests(client, userEmail, listEl, se
       acceptBtn.disabled = true;
       rejectBtn.disabled = true;
       try {
-        await authFetch("share-reject", {
-          method: "POST",
-          body: JSON.stringify({ requestId: row.id }),
-        });
-        await refreshIncomingShareRequests(client, userEmail, listEl, setStatus);
+        await rejectShareRequest(client, userEmail, listEl, setStatus, row.id);
       } catch (err) {
         console.error(err);
         setStatus?.("거절하지 못했습니다.");

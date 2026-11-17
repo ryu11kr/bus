@@ -96,7 +96,7 @@ self.addEventListener("push", (event) => {
     data = {};
   }
   const title = data.title || "내버스시간표";
-  const body = data.body || "정류장 정보 공유 요청이 왔습니다.";
+  const body = data.body || "버스 정류장 정보를 공유했습니다.";
   const url = data.url || "./?share=pending";
   const tag = data.requestId ? `bus-share-${data.requestId}` : "bus-share";
 

@@ -772,6 +772,7 @@ footer {
 
 .bus-share-hint-dialog #bus-share-hint-body {
   font-weight: 700;
+  white-space: pre-line;
 }
 
 .photo-guide-figure {

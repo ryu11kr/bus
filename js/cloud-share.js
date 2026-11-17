@@ -306,6 +306,54 @@ function urlBase64ToUint8Array(base64String) {
  * @param {import("@supabase/supabase-js").Session} session
  * @param {(text: string) => void} setStatus
  */
+async function fetchVapidPublicKey() {
+  const cfgRes = await fetch(new URL("push-public-key", apiBase()), { cache: "no-store" });
+  return cfgRes.json();
+}
+
+/**
+ * 브라우저 구독 + 서버 저장 (권한은 이미 granted 일 때)
+ */
+async function registerPushSubscriptionOnServer() {
+  const cfg = await fetchVapidPublicKey();
+  if (!cfg.configured || !cfg.publicKey) return false;
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
+    });
+  }
+
+  await authFetch("push-subscribe", {
+    method: "POST",
+    body: JSON.stringify({ subscription: sub.toJSON() }),
+  });
+  return true;
+}
+
+/** 로그인 후 구독이 서버에 빠진 경우 보정 */
+export async function ensurePushSubscriptionOnServer() {
+  if (!isAndroidPushCapable()) return;
+  if (Notification.permission !== "granted") return;
+  try {
+    const ok = await registerPushSubscriptionOnServer();
+    if (ok) {
+      try {
+        localStorage.setItem(PUSH_OK_STORAGE, "1");
+      } catch {
+        /* ignore */
+      }
+      const pushBtn = document.querySelector("#bus-share-push-enable");
+      if (pushBtn) pushBtn.hidden = true;
+    }
+  } catch (err) {
+    console.warn("ensurePushSubscriptionOnServer", err);
+  }
+}
+
 export async function tryEnableAndroidPush(client, session, setStatus) {
   if (!isAndroidPushCapable()) {
     setStatus?.(
@@ -321,20 +369,17 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   }
 
   setStatus?.("푸시 설정 확인 중…");
-  let cfg;
   try {
-    const cfgRes = await fetch(new URL("push-public-key", apiBase()), { cache: "no-store" });
-    cfg = await cfgRes.json();
+    const cfg = await fetchVapidPublicKey();
+    if (!cfg.configured || !cfg.publicKey) {
+      setStatus?.(
+        "서버에 VAPID 키가 없습니다. Vercel에 VAPID_PUBLIC_KEY·PRIVATE_KEY·SUBJECT 넣고 Redeploy (메뉴얼-정류장공유-Vercel넣기.md)."
+      );
+      return false;
+    }
   } catch (err) {
     console.error(err);
     setStatus?.("푸시 서버에 연결하지 못했습니다. 네트워크를 확인해 주세요.");
-    return false;
-  }
-
-  if (!cfg.configured || !cfg.publicKey) {
-    setStatus?.(
-      "서버에 VAPID 키가 없습니다. Vercel에 VAPID_PUBLIC_KEY·PRIVATE_KEY·SUBJECT 넣고 Redeploy (메뉴얼-정류장공유-Vercel넣기.md)."
-    );
     return false;
   }
 
@@ -347,39 +392,14 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
     return false;
   }
 
-  let reg;
   try {
-    reg = await navigator.serviceWorker.ready;
+    await navigator.serviceWorker.ready;
+    await registerPushSubscriptionOnServer();
   } catch (err) {
     console.error(err);
-    setStatus?.("앱이 준비되지 않았습니다. 홈 화면에 추가한 뒤 다시 시도해 주세요.");
-    return false;
-  }
-
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) {
-    try {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
-      });
-    } catch (err) {
-      console.error(err);
-      setStatus?.(
-        "푸시 등록에 실패했습니다. 홈 화면에 추가했는지 확인하고, 삼성 인터넷이면 최신 버전인지 확인해 주세요."
-      );
-      return false;
-    }
-  }
-
-  try {
-    await authFetch("push-subscribe", {
-      method: "POST",
-      body: JSON.stringify({ subscription: sub.toJSON() }),
-    });
-  } catch (err) {
-    console.error(err);
-    setStatus?.("푸시 구독 저장에 실패했습니다. 다시 로그인 후 시도해 주세요.");
+    setStatus?.(
+      "푸시 등록에 실패했습니다. 홈 화면에 추가했는지 확인하고, 삼성 인터넷이면 최신 버전인지 확인해 주세요."
+    );
     return false;
   }
 
@@ -756,17 +776,27 @@ export function initBusShareUi(client, session, setStatus) {
           }
           await pushLocalStateToCloud(client, userId);
           const requestId = await sendShareRequestViaClient(client, userId, fromEmail, toEmail);
+          let hint =
+            "공유 요청을 보냈습니다. 상대가 수락하면 각자 목록에 반영됩니다.";
           try {
-            await authFetch("share-notify", {
+            const notifyRes = await authFetch("share-notify", {
               method: "POST",
               body: JSON.stringify({ requestId }),
             });
+            const push = notifyRes?.push;
+            if (push?.skipped === "no_subscriptions") {
+              hint +=
+                "\n\n상대가 아직 「Android 공유 알림 켜기」를 하지 않아 잠금화면 푸시는 가지 않을 수 있습니다.";
+            } else if (push && typeof push.sent === "number" && push.sent < 1) {
+              hint += "\n\n잠금 알림 전송에 실패했을 수 있습니다. 상대에게 PWA 설치·알림 켜기를 안내해 주세요.";
+            }
           } catch (pushErr) {
             console.warn(pushErr);
+            hint += "\n\n(잠금 알림 서버 연결 실패 — 공유 요청 자체는 보냈습니다.)";
           }
           sendInput.value = "";
           setStatus?.("");
-          showBusShareHint("공유 요청을 보냈습니다. 상대가 수락하면 각자 목록에 반영됩니다.");
+          showBusShareHint(hint);
         } catch (err) {
           console.error(err);
           setStatus?.(describeShareError(err));

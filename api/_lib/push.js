@@ -47,9 +47,13 @@ export async function sendSharePushToEmail(admin, toEmail, payload) {
       const sub = row.subscription;
       if (!sub?.endpoint) return;
       try {
-        await webpush.sendNotification(sub, body);
+        await webpush.sendNotification(sub, body, {
+          TTL: 60 * 60,
+          urgency: "high",
+        });
         sent += 1;
       } catch (err) {
+        console.error("web-push send failed", statusCode(err), err?.body || err?.message);
         const status = err?.statusCode;
         if (status === 404 || status === 410) {
           await admin
@@ -60,5 +64,9 @@ export async function sendSharePushToEmail(admin, toEmail, payload) {
       }
     })
   );
-  return { sent };
+  return { sent, skipped: sent ? undefined : "delivery_failed_or_no_endpoint" };
+}
+
+function statusCode(err) {
+  return err && typeof err === "object" && "statusCode" in err ? err.statusCode : null;
 }

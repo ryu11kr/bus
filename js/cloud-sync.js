@@ -8,6 +8,7 @@ import {
 } from "./cloud-sync-data.js";
 import {
   bindIncomingShareLiveUpdates,
+  ensurePushSubscriptionOnServer,
   initBusShareUi,
   refreshIncomingShareRequests,
   startIncomingSharePolling,
@@ -318,6 +319,7 @@ async function initGoogleAuthUi(client, cfg) {
       );
       startIncomingSharePolling(client, setShareStatus);
       bindIncomingShareLiveUpdates(client, setShareStatus);
+      void ensurePushSubscriptionOnServer();
       if (ticket !== renderSerial) return;
     } else {
       stopIncomingSharePolling();

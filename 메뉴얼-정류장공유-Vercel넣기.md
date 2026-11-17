@@ -64,6 +64,10 @@ npx web-push generate-vapid-keys
 
 | 증상 | 확인 |
 |------|------|
-| `server_not_configured` | `SUPABASE_SERVICE_ROLE_KEY` |
-| 공유 카드 안 뜸 | SQL 실행 · 아내 **로그인 Gmail**이 보낼 때 입력한 주소와 같은지 |
+| 공유 보내기 실패 (빨간/일반 메시지) | **1순위:** `bus-share-setup.sql` SQL 실행했는지 · 정류장 **사진 등록 후** 보내기 |
+| 수락만 안 됨 | `SUPABASE_SERVICE_ROLE_KEY` (수락·사진 복사에 필요, **보내기는 로그인만으로 가능**) |
+| 공유 카드 안 뜸 | 아내 **로그인 Gmail** = 보낼 때 입력한 주소와 동일(소문자) |
 | 푸시 안 옴 | VAPID 3개 · PWA 설치 · 알림 허용 · **공유 알림 켜기** 버튼 |
+
+진단 URL (브라우저): `https://bus.uxpwa.com/api/share-status`  
+→ `shareTableReady: false` 이면 SQL 미실행, `hasServiceRole: false` 이면 수락 전에 SERVICE_ROLE 필요.

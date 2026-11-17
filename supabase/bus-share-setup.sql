@@ -45,6 +45,13 @@ create policy "bus_share_update_recipient_reject"
   )
   with check (status = 'rejected');
 
+drop policy if exists "bus_share_update_sender_cancel" on public.bus_share_requests;
+create policy "bus_share_update_sender_cancel"
+  on public.bus_share_requests for update
+  to authenticated
+  using (from_user_id = auth.uid() and status = 'pending')
+  with check (status = 'cancelled');
+
 create table if not exists public.bus_push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,

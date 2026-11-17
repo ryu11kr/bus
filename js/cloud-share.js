@@ -43,6 +43,66 @@ async function authFetch(path, options = {}) {
   return json;
 }
 
+function describeShareError(err) {
+  const code = err?.code || err?.message;
+  if (code === "no_stops") {
+    return "클라우드에 저장된 정류장이 없습니다. 사진 등록 후 잠시 기다렸다가 다시 보내 주세요.";
+  }
+  if (code === "self_share") return "본인 이메일로는 보낼 수 없습니다.";
+  if (code === "invalid_email") return "Gmail 형식을 확인해 주세요.";
+  if (code === "login_required") return "다시 구글 로그인 후 시도해 주세요.";
+  if (code === "server_not_configured" || code === "insert_failed") {
+    return "Supabase SQL(bus-share-setup.sql) 실행과 Vercel SUPABASE_SERVICE_ROLE_KEY를 확인해 주세요.";
+  }
+  if (code === "PGRST205" || String(err?.message || "").includes("bus_share_requests")) {
+    return "Supabase SQL Editor에서 bus-share-setup.sql을 실행해 주세요.";
+  }
+  if (err?.message) return `공유 실패: ${err.message}`;
+  return "공유를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {string} userId
+ * @param {string} fromEmail
+ * @param {string} toEmail
+ */
+async function sendShareRequestViaClient(client, userId, fromEmail, toEmail) {
+  const { data: cloudRow, error: cloudErr } = await client
+    .from("bus_user_data")
+    .select("stops")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (cloudErr) throw cloudErr;
+
+  const stops = Array.isArray(cloudRow?.stops) ? cloudRow.stops : [];
+  if (!stops.length) {
+    const err = new Error("no_stops");
+    err.code = "no_stops";
+    throw err;
+  }
+
+  await client
+    .from("bus_share_requests")
+    .update({ status: "cancelled", responded_at: new Date().toISOString() })
+    .eq("from_user_id", userId)
+    .eq("to_email", toEmail)
+    .eq("status", "pending");
+
+  const { data: row, error: insErr } = await client
+    .from("bus_share_requests")
+    .insert({
+      from_user_id: userId,
+      from_email: fromEmail,
+      to_email: toEmail,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+  return row.id;
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -154,10 +214,17 @@ export async function refreshIncomingShareRequests(client, userEmail, listEl, se
       rejectBtn.disabled = true;
       setStatus?.("정류장을 가져오는 중…");
       try {
-        await authFetch("share-accept", {
-          method: "POST",
-          body: JSON.stringify({ requestId: row.id }),
-        });
+        try {
+          await authFetch("share-accept", {
+            method: "POST",
+            body: JSON.stringify({ requestId: row.id }),
+          });
+        } catch (accErr) {
+          if (accErr.code === "server_not_configured") {
+            throw Object.assign(new Error("server_not_configured"), accErr);
+          }
+          throw accErr;
+        }
         const userId = (await client.auth.getSession()).data.session?.user?.id;
         if (userId) {
           await runFullCloudSync(client, userId);
@@ -166,7 +233,7 @@ export async function refreshIncomingShareRequests(client, userEmail, listEl, se
         await refreshIncomingShareRequests(client, userEmail, listEl, setStatus);
       } catch (err) {
         console.error(err);
-        setStatus?.("가져오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        setStatus?.(describeShareError(err));
         acceptBtn.disabled = false;
         rejectBtn.disabled = false;
       }
@@ -241,25 +308,32 @@ export function initBusShareUi(client, session, setStatus) {
         try {
           const { data: sess } = await client.auth.getSession();
           const userId = sess.session?.user?.id;
-          if (!userId) throw new Error("login_required");
+          const fromEmail = normalizeEmail(sess.session?.user?.email || "");
+          if (!userId || !fromEmail) {
+            const e = new Error("login_required");
+            e.code = "login_required";
+            throw e;
+          }
+          if (toEmail === fromEmail) {
+            const e = new Error("self_share");
+            e.code = "self_share";
+            throw e;
+          }
           await pushLocalStateToCloud(client, userId);
-          await authFetch("share-send", {
-            method: "POST",
-            body: JSON.stringify({ toEmail }),
-          });
+          const requestId = await sendShareRequestViaClient(client, userId, fromEmail, toEmail);
+          try {
+            await authFetch("share-notify", {
+              method: "POST",
+              body: JSON.stringify({ requestId }),
+            });
+          } catch (pushErr) {
+            console.warn(pushErr);
+          }
           sendInput.value = "";
           setStatus?.("공유 요청을 보냈습니다. 상대가 수락하면 각자 목록에 반영됩니다.");
         } catch (err) {
           console.error(err);
-          if (err.code === "no_stops") {
-            setStatus?.("등록한 정류장이 없습니다. 먼저 사진을 등록해 주세요.");
-          } else if (err.code === "self_share") {
-            setStatus?.("본인 이메일로는 보낼 수 없습니다.");
-          } else if (err.code === "server_not_configured") {
-            setStatus?.("서버에 SUPABASE_SERVICE_ROLE_KEY가 필요합니다. 메뉴얼을 확인해 주세요.");
-          } else {
-            setStatus?.("공유를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
-          }
+          setStatus?.(describeShareError(err));
         } finally {
           sendBtn.disabled = false;
         }

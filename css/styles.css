@@ -977,6 +977,34 @@ footer {
   box-shadow: var(--shadow);
 }
 
+.detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.detail-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem 0.65rem;
+}
+
+.detail-actions-grid .big-btn {
+  min-height: 3.5rem;
+  padding: 0.65rem 0.45rem;
+  font-size: clamp(0.98rem, 3.5vw, 1.18rem);
+  line-height: 1.28;
+  text-align: center;
+  hyphens: none;
+}
+
+.detail-actions .back-btn-bottom {
+  margin-top: 0;
+  min-height: 3.75rem;
+  font-size: 1.35rem;
+}
+
 .view-list .section-heading {
   margin-bottom: 0.5rem;
 }

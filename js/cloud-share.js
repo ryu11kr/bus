@@ -219,17 +219,14 @@ function isInstalledPwa() {
 }
 
 const ANDROID_NOTIFICATION_HELP =
-  "「내버스시간표」가 앱 알림 목록에 없어도 정상일 수 있습니다.\n" +
-  "PWA는 네이티브 앱이 아니라, 알림이 Chrome·브라우저 쪽으로 잡히는 경우가 많습니다.\n\n" +
-  "① 홈 화면에 추가한 아이콘으로 실행 (탭 말고)\n\n" +
-  "② 설정 → 앱 → Chrome(크롬) → 알림 → 켜기\n" +
-  "   (삼성 인터넷으로 설치했으면 「인터넷」 앱 알림)\n\n" +
-  "③ Chrome → ⋮ → 설정 → 사이트 설정 → 알림\n" +
-  "   → bus.uxpwa.com → 허용\n\n" +
-  "④ 삼성: 설정 → 배터리 → Chrome → 제한 없음\n\n" +
-  "⑤ 앱에서 「기기 알림 테스트」 → 상단/알림창에 뜨는지 확인\n\n" +
-  "플레이 스토어 설치형 앱처럼 목록에 꼭 뜨지는 않지만,\n" +
-  "위 설정이 맞으면 잠금·상단 알림은 될 수 있습니다.";
+  "※ 잠금 알림이 어려우면 생략하세요.\n" +
+  "공유 받을 때는 **홈 화면 내버스시간표 앱만 켜면** 요청이 뜹니다.\n\n" +
+  "--- 잠금 알림까지 받고 싶을 때만 ---\n\n" +
+  "1) 홈 화면 **내버스시간표** 아이콘으로 실행\n\n" +
+  "2) **맨 위 주소창 왼쪽** (자물쇠 또는 ⓘ) 누르기 → **알림** → **허용**\n" +
+  "   (주소 직접 입력하는 칸은 없어도 됩니다. 지금 켜 둔 화면에서만 하면 됩니다.)\n\n" +
+  "3) 설정 → 앱 → **Chrome** → 알림 켜기\n\n" +
+  "그래도 안 되면 PWA 한계입니다. 앱 켜서 수락하는 방식을 쓰세요.";
 
 export function showAndroidNotificationHelp() {
   showBusShareHint(ANDROID_NOTIFICATION_HELP);
@@ -329,6 +326,30 @@ async function hasActivePushSubscription() {
   }
 }
 
+function clearPushOkStorage() {
+  try {
+    localStorage.removeItem(PUSH_OK_STORAGE);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 알림 끈 뒤 「공유 알림 켜기」가 다시 나오게 */
+export async function resetLocalPushRegistration() {
+  clearPushOkStorage();
+  if (!isAndroidPushCapable()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (err) {
+    console.warn("resetLocalPushRegistration", err);
+  }
+}
+
+const PUSH_ENABLE_LABEL = "Android 공유 알림 켜기";
+const PUSH_DENIED_LABEL = "알림 허용 후 다시 켜기";
+
 /**
  * @param {HTMLButtonElement | null} pushBtn
  */
@@ -338,27 +359,34 @@ export async function syncPushEnableButton(pushBtn) {
     pushBtn.hidden = true;
     return;
   }
-  if (Notification.permission === "denied") {
-    pushBtn.hidden = true;
+
+  pushBtn.hidden = false;
+  const perm = Notification.permission;
+
+  if (perm !== "granted") {
+    clearPushOkStorage();
+    pushBtn.textContent = perm === "denied" ? PUSH_DENIED_LABEL : PUSH_ENABLE_LABEL;
     return;
   }
-  let hide = false;
+
+  const subscribed = await hasActivePushSubscription();
+  let markedOk = false;
   try {
-    hide = localStorage.getItem(PUSH_OK_STORAGE) === "1" && Notification.permission === "granted";
+    markedOk = localStorage.getItem(PUSH_OK_STORAGE) === "1";
   } catch {
     /* ignore */
   }
-  if (!hide) {
-    hide = await hasActivePushSubscription();
+
+  if (subscribed && markedOk) {
+    pushBtn.hidden = true;
+    return;
   }
-  if (hide) {
-    try {
-      localStorage.setItem(PUSH_OK_STORAGE, "1");
-    } catch {
-      /* ignore */
-    }
+
+  if (!subscribed) {
+    clearPushOkStorage();
   }
-  pushBtn.hidden = hide;
+  pushBtn.textContent = PUSH_ENABLE_LABEL;
+  pushBtn.hidden = false;
 }
 
 function apiBase() {
@@ -568,8 +596,10 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
     return false;
   }
   if (Notification.permission === "denied") {
-    setStatus?.(
-      "알림이 꺼져 있습니다. 설정 → 앱 → 내버스시간표 → 알림을 켠 뒤 다시 시도해 주세요."
+    showBusShareHint(
+      "이 사이트 알림이 **차단** 상태입니다.\n\n" +
+        "Chrome 탭에서 bus.uxpwa.com 열기 → 주소창 왼쪽 ⓘ/자물쇠 → **알림 → 허용**\n\n" +
+        "그다음 이 화면에서 「Android 공유 알림 켜기」를 다시 누르세요."
     );
     return false;
   }
@@ -931,6 +961,7 @@ export function initBusShareUi(client, session, setStatus) {
   const pushTestBtn = document.querySelector("#bus-share-push-test");
   const pushLocalTestBtn = document.querySelector("#bus-share-push-local-test");
   const pushHelpBtn = document.querySelector("#bus-share-push-help");
+  const pushResetBtn = document.querySelector("#bus-share-push-reset");
 
   if (!root || !session?.user) {
     if (root) root.hidden = true;
@@ -962,6 +993,29 @@ export function initBusShareUi(client, session, setStatus) {
     if (pushHelpBtn) {
       pushHelpBtn.addEventListener("click", () => showAndroidNotificationHelp());
     }
+
+    if (pushResetBtn) {
+      pushResetBtn.addEventListener("click", () => {
+        pushResetBtn.disabled = true;
+        void resetLocalPushRegistration()
+          .then(() => syncPushEnableButton(pushBtn))
+          .then(() => {
+            showBusShareHint(
+              "앱 안의 알림 기록을 초기화했습니다.\n\n" +
+                "「Android 공유 알림 켜기」가 보이면 눌러 허용하세요.\n" +
+                "차단해 둔 적 있으면 Chrome 탭에서 bus.uxpwa.com → ⓘ → 알림 허용부터 하세요."
+            );
+          })
+          .finally(() => {
+            pushResetBtn.disabled = false;
+          });
+      });
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || !pushBtn) return;
+      void syncPushEnableButton(pushBtn);
+    });
 
     if (pushLocalTestBtn) {
       pushLocalTestBtn.addEventListener("click", () => {

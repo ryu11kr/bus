@@ -284,10 +284,8 @@ function bindBusUi() {
   const btnNewAlbum = document.querySelector("#btn-new-album");
   const btnBack = document.querySelector("#btn-back-list");
   const btnRename = document.querySelector("#btn-rename-stop");
-  const btnReplace = document.querySelector("#btn-replace-photo");
   const btnAddCamera = document.querySelector("#btn-add-photo-camera");
   const btnAddAlbum = document.querySelector("#btn-add-photo-album");
-  const btnDeletePhoto = document.querySelector("#btn-delete-photo");
   const btnDelete = document.querySelector("#btn-delete-stop");
   const nameDialog = document.querySelector("#stop-name-dialog");
   const nameForm = document.querySelector("#stop-name-form");
@@ -339,48 +337,6 @@ function bindBusUi() {
 
   btnAddCamera?.addEventListener("click", () => beginAddPhoto(true));
   btnAddAlbum?.addEventListener("click", () => beginAddPhoto(false));
-
-  btnReplace?.addEventListener("click", () => {
-    const stop = getActiveStop();
-    if (!stop) return;
-    pendingStopAction = "replace-photo";
-    replaceStopId = stop.id;
-    replacePhotoId = getActivePhoto(stop)?.id || null;
-    const useCamera = window.confirm("확인 = 카메라로 찍기\n취소 = 앨범에서 고르기");
-    const input = document.querySelector(useCamera ? "#file-camera" : "#file-album");
-    if (input) input.value = "";
-    input?.click();
-  });
-
-  btnDeletePhoto?.addEventListener("click", () => {
-    const stop = getActiveStop();
-    const photo = getActivePhoto(stop);
-    if (!stop || !photo) return;
-    const photos = getStopPhotos(stop);
-    if (photos.length <= 1) {
-      if (!window.confirm(`"${stop.name}" 정류장의 마지막 사진입니다. 정류장 전체를 삭제할까요?`)) {
-        return;
-      }
-      busStops = busStops.filter((s) => s.id !== stop.id);
-      activeStopId = null;
-      activePhotoId = null;
-      saveBusState();
-      showListView();
-      renderStopList();
-      setBusStatus("정류장을 삭제했습니다.");
-      return;
-    }
-    const label = displayPhotoLabel(photo, photos.findIndex((p) => p.id === photo.id));
-    if (!window.confirm(`"${label}" 사진만 삭제할까요?`)) return;
-    stop.photos = photos.filter((p) => p.id !== photo.id);
-    stop.updatedAt = new Date().toISOString();
-    normalizeStopPhotos(stop);
-    activePhotoId = getStopPhotos(stop).at(-1)?.id || null;
-    saveBusState();
-    renderStopDetail(stop.id);
-    renderStopList();
-    setBusStatus("사진을 삭제했습니다.");
-  });
 
   btnDelete?.addEventListener("click", () => {
     const stop = getActiveStop();
@@ -1188,6 +1144,54 @@ function getActiveStop() {
   return busStops.find((s) => s.id === activeStopId) || null;
 }
 
+function beginReplacePhoto(stop, photoId) {
+  if (!stop || !photoId) return;
+  pendingStopAction = "replace-photo";
+  replaceStopId = stop.id;
+  replacePhotoId = photoId;
+  activePhotoId = photoId;
+  const useCamera = window.confirm("확인 = 카메라로 찍기\n취소 = 앨범에서 고르기");
+  const input = document.querySelector(useCamera ? "#file-camera" : "#file-album");
+  if (input) input.value = "";
+  input?.click();
+}
+
+function deletePhotoFromStop(stop, photoId) {
+  if (!stop || !photoId) return;
+  const photos = getStopPhotos(stop);
+  const photo = photos.find((p) => p.id === photoId);
+  if (!photo) return;
+
+  if (photos.length <= 1) {
+    if (!window.confirm(`"${stop.name}" 정류장의 마지막 사진입니다. 정류장 전체를 삭제할까요?`)) {
+      return;
+    }
+    busStops = busStops.filter((s) => s.id !== stop.id);
+    activeStopId = null;
+    activePhotoId = null;
+    saveBusState();
+    showListView();
+    renderStopList();
+    setBusStatus("정류장을 삭제했습니다.");
+    return;
+  }
+
+  const label = displayPhotoLabel(photo, photos.findIndex((p) => p.id === photo.id));
+  if (!window.confirm(`"${label}" 사진만 삭제할까요?`)) return;
+  stop.photos = photos.filter((p) => p.id !== photoId);
+  stop.updatedAt = new Date().toISOString();
+  normalizeStopPhotos(stop);
+  activePhotoId = getStopPhotos(stop).at(-1)?.id || null;
+  saveBusState();
+  renderStopDetail(stop.id);
+  renderStopList();
+  setBusStatus("사진을 삭제했습니다.");
+}
+
+function photoHasCustomLabel(photo) {
+  return Boolean(typeof photo?.label === "string" && photo.label.trim());
+}
+
 function collapseListPanelDetails() {
   document.querySelectorAll("#view-list details[open]").forEach((el) => {
     el.open = false;
@@ -1773,12 +1777,19 @@ function renderStopDetail(stopId) {
     photos.forEach((p, index) => {
       const li = document.createElement("li");
       li.className = "detail-photo-card panel-lite";
-      if (p.id === activePhotoId) li.classList.add("is-selected");
 
       const nameBtn = document.createElement("button");
       nameBtn.type = "button";
-      nameBtn.className = "detail-photo-card-label";
-      nameBtn.textContent = displayPhotoLabel(p, index);
+      nameBtn.className = "detail-photo-label-btn";
+      const kicker = document.createElement("span");
+      kicker.className = "detail-photo-label-btn-kicker";
+      kicker.textContent = "사진 이름 (눌러서 입력)";
+      const value = document.createElement("span");
+      value.className = "detail-photo-label-btn-value";
+      const hasLabel = photoHasCustomLabel(p);
+      value.textContent = hasLabel ? displayPhotoLabel(p, index) : "버스 번호·애칭 적기";
+      if (!hasLabel) value.classList.add("is-placeholder");
+      nameBtn.append(kicker, value);
       nameBtn.addEventListener("click", () => {
         pendingStopAction = "rename-photo-label";
         pendingPhotoLabelEditId = p.id;
@@ -1802,31 +1813,32 @@ function renderStopDetail(stopId) {
         }
       });
 
-      const selectBtn = document.createElement("button");
-      selectBtn.type = "button";
-      selectBtn.className = "detail-photo-card-select";
-      const selected = p.id === activePhotoId;
-      selectBtn.textContent = selected ? "선택됨 (다시 찍기·삭제)" : "이 사진 선택";
-      selectBtn.setAttribute("aria-pressed", selected ? "true" : "false");
-      selectBtn.addEventListener("click", () => {
-        activePhotoId = p.id;
-        renderStopDetail(stopId);
-      });
-
       const hint = document.createElement("p");
       hint.className = "detail-photo-card-hint";
-      hint.textContent = "사진 누르면 크게 · 이름 누르면 바꾸기";
+      hint.textContent = "사진을 누르면 크게 볼 수 있습니다";
 
-      li.append(nameBtn, hit, selectBtn, hint);
+      const actions = document.createElement("div");
+      actions.className = "detail-photo-card-actions";
+
+      const btnReplace = document.createElement("button");
+      btnReplace.type = "button";
+      btnReplace.className = "big-btn secondary detail-photo-card-action";
+      btnReplace.textContent = "이 사진 다시 찍기";
+      btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
+
+      const btnDeletePhoto = document.createElement("button");
+      btnDeletePhoto.type = "button";
+      btnDeletePhoto.className = "big-btn ghost danger-text detail-photo-card-action";
+      btnDeletePhoto.textContent = "이 사진 삭제";
+      btnDeletePhoto.addEventListener("click", () => deletePhotoFromStop(stop, p.id));
+
+      actions.append(btnReplace, btnDeletePhoto);
+      li.append(nameBtn, hit, hint, actions);
       list.append(li);
     });
   }
 
-  setBusStatus(
-    photos.length > 1
-      ? "다시 찍기·삭제할 사진은 「이 사진 선택」으로 고른 뒤 아래 버튼을 누르세요."
-      : ""
-  );
+  setBusStatus("");
 }
 
 function formatStopDate(iso) {

@@ -142,6 +142,23 @@ function showBusShareHint(message) {
   okBtn.focus();
 }
 
+function canonicalGmailAddress(email) {
+  const e = String(email || "")
+    .trim()
+    .toLowerCase();
+  const at = e.lastIndexOf("@");
+  if (at < 1) return e;
+  let local = e.slice(0, at);
+  let domain = e.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") {
+    local = local.replace(/\./g, "");
+    const plus = local.indexOf("+");
+    if (plus >= 0) local = local.slice(0, plus);
+  }
+  return `${local}@${domain}`;
+}
+
 function normalizeEmail(email) {
   let raw = String(email || "")
     .trim()
@@ -150,7 +167,41 @@ function normalizeEmail(email) {
   if (!raw.includes("@")) {
     raw = `${raw}@gmail.com`;
   }
-  return raw;
+  return canonicalGmailAddress(raw);
+}
+
+function applicationServerKeysMatch(a, b) {
+  if (!a || !b) return false;
+  const aa = new Uint8Array(a);
+  const bb = new Uint8Array(b);
+  if (aa.length !== bb.length) return false;
+  for (let i = 0; i < aa.length; i += 1) {
+    if (aa[i] !== bb[i]) return false;
+  }
+  return true;
+}
+
+function describePushSendResult(push) {
+  if (!push) return "";
+  if (typeof push.sent === "number" && push.sent > 0) {
+    return "\n\n잠금·상단 알림을 보냈습니다.";
+  }
+  const skipped = push.skipped;
+  if (skipped === "no_subscriptions") {
+    return (
+      "\n\n※ 받는 사람 쪽에 서버 구독이 없습니다.\n" +
+      "받는 사람: 홈 화면에 추가(PWA) → 「Android 공유 알림 켜기」 → 「잠금 알림 테스트」"
+    );
+  }
+  if (skipped === "vapid") {
+    return "\n\n※ Vercel VAPID 3개가 없어 푸시를 보내지 못했습니다.";
+  }
+  if (skipped === "delivery_failed_or_no_endpoint") {
+    return (
+      "\n\n※ 푸시 전송에 실패했습니다. 받는 사람이 「Android 공유 알림 켜기」를 다시 누른 뒤 「잠금 알림 테스트」를 해 보세요."
+    );
+  }
+  return "\n\n※ 잠금 알림이 가지 않았을 수 있습니다.";
 }
 
 function isAndroidPushCapable() {
@@ -319,11 +370,19 @@ async function registerPushSubscriptionOnServer() {
   if (!cfg.configured || !cfg.publicKey) return false;
 
   const reg = await navigator.serviceWorker.ready;
+  const desiredKey = urlBase64ToUint8Array(cfg.publicKey);
   let sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    const curKey = sub.options?.applicationServerKey;
+    if (curKey && !applicationServerKeysMatch(curKey, desiredKey)) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+  }
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
+      applicationServerKey: desiredKey,
     });
   }
 
@@ -351,6 +410,30 @@ export async function ensurePushSubscriptionOnServer() {
     }
   } catch (err) {
     console.warn("ensurePushSubscriptionOnServer", err);
+  }
+}
+
+/**
+ * @param {(text: string) => void} [setStatus]
+ */
+export async function refreshPushReadiness(setStatus) {
+  if (!isAndroidPushCapable()) return;
+  const testBtn = document.querySelector("#bus-share-push-test");
+  try {
+    const st = await authFetch("push-status");
+    if (testBtn) testBtn.hidden = !st.readyForLockScreenPush;
+    if (st.readyForLockScreenPush) {
+      return;
+    }
+    const parts = [];
+    if (!st.vapidConfigured) parts.push("서버 VAPID 미설정");
+    if ((st.subscriptionCount ?? 0) < 1) {
+      parts.push("서버에 이 기기 구독 없음 → 「Android 공유 알림 켜기」");
+    }
+    if (parts.length) setStatus?.(parts.join(" · "));
+  } catch (err) {
+    console.warn("refreshPushReadiness", err);
+    if (testBtn) testBtn.hidden = true;
   }
 }
 
@@ -411,6 +494,7 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   }
   const pushBtn = document.querySelector("#bus-share-push-enable");
   if (pushBtn) pushBtn.hidden = true;
+  await refreshPushReadiness(setStatus);
   void session;
   void client;
   return true;
@@ -721,6 +805,7 @@ export function initBusShareUi(client, session, setStatus) {
   const sendBtn = document.querySelector("#bus-share-send");
   const incomingEl = document.querySelector("#bus-share-incoming");
   const pushBtn = document.querySelector("#bus-share-push-enable");
+  const pushTestBtn = document.querySelector("#bus-share-push-test");
 
   if (!root || !session?.user) {
     if (root) root.hidden = true;
@@ -745,6 +830,34 @@ export function initBusShareUi(client, session, setStatus) {
           .finally(() => {
             pushBtn.disabled = false;
             void syncPushEnableButton(pushBtn);
+          });
+      });
+    }
+
+    if (pushTestBtn) {
+      pushTestBtn.addEventListener("click", () => {
+        pushTestBtn.disabled = true;
+        setStatus?.("테스트 알림 보내는 중…");
+        authFetch("push-test-self", { method: "POST", body: "{}" })
+          .then((res) => {
+            const push = res?.push;
+            if (push && push.sent > 0) {
+              setStatus?.(
+                "테스트 알림을 보냈습니다. 앱을 끄고 10초 안에 상단·잠금 화면을 확인하세요."
+              );
+              return;
+            }
+            const skipped = push?.skipped || "unknown";
+            setStatus?.(
+              `테스트 알림 실패 (${skipped}). 「Android 공유 알림 켜기」를 다시 해 주세요.`
+            );
+          })
+          .catch((err) => {
+            console.error(err);
+            setStatus?.("테스트 알림 요청 실패. 네트워크·로그인을 확인해 주세요.");
+          })
+          .finally(() => {
+            pushTestBtn.disabled = false;
           });
       });
     }
@@ -783,13 +896,7 @@ export function initBusShareUi(client, session, setStatus) {
               method: "POST",
               body: JSON.stringify({ requestId }),
             });
-            const push = notifyRes?.push;
-            if (push?.skipped === "no_subscriptions") {
-              hint +=
-                "\n\n상대가 아직 「Android 공유 알림 켜기」를 하지 않아 잠금화면 푸시는 가지 않을 수 있습니다.";
-            } else if (push && typeof push.sent === "number" && push.sent < 1) {
-              hint += "\n\n잠금 알림 전송에 실패했을 수 있습니다. 상대에게 PWA 설치·알림 켜기를 안내해 주세요.";
-            }
+            hint += describePushSendResult(notifyRes?.push);
           } catch (pushErr) {
             console.warn(pushErr);
             hint += "\n\n(잠금 알림 서버 연결 실패 — 공유 요청 자체는 보냈습니다.)";
@@ -808,6 +915,7 @@ export function initBusShareUi(client, session, setStatus) {
   }
 
   void syncPushEnableButton(pushBtn);
+  void refreshPushReadiness(setStatus);
 
   const params = new URLSearchParams(window.location.search);
   if (params.get("share") === "pending" && incomingEl) {

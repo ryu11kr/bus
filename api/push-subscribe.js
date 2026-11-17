@@ -1,6 +1,6 @@
 /** POST { subscription } — 푸시 구독 저장 */
 
-import { getAuthUser, normalizeEmail } from "./_lib/auth.js";
+import { canonicalShareEmail, getAuthUser } from "./_lib/auth.js";
 import { getAdminClient } from "./_lib/admin.js";
 import { isPushConfigured } from "./_lib/push.js";
 
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   const { error } = await admin.from("bus_push_subscriptions").upsert(
     {
       user_id: user.id,
-      user_email: normalizeEmail(user.email),
+      user_email: canonicalShareEmail(user.email),
       endpoint: subscription.endpoint,
       subscription,
       updated_at: new Date().toISOString(),

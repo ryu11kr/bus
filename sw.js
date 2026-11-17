@@ -99,13 +99,14 @@ self.addEventListener("push", (event) => {
   const body = data.body || "버스 정류장 정보를 공유했습니다.";
   const url = data.url || "./?share=pending";
   const tag = data.requestId ? `bus-share-${data.requestId}` : "bus-share";
+  const iconUrl = new URL("./icons/icon-192.png", self.location.href).href;
 
   event.waitUntil(
     (async () => {
       await self.registration.showNotification(title, {
         body,
-        icon: "./icons/icon-192.png",
-        badge: "./icons/icon-192.png",
+        icon: iconUrl,
+        badge: iconUrl,
         tag,
         data: { url },
         renotify: true,

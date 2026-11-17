@@ -10,6 +10,7 @@ import {
   bindIncomingShareLiveUpdates,
   ensurePushSubscriptionOnServer,
   initBusShareUi,
+  refreshPushReadiness,
   refreshIncomingShareRequests,
   startIncomingSharePolling,
   stopIncomingSharePolling,
@@ -319,7 +320,7 @@ async function initGoogleAuthUi(client, cfg) {
       );
       startIncomingSharePolling(client, setShareStatus);
       bindIncomingShareLiveUpdates(client, setShareStatus);
-      void ensurePushSubscriptionOnServer();
+      void ensurePushSubscriptionOnServer().then(() => refreshPushReadiness(setShareStatus));
       if (ticket !== renderSerial) return;
     } else {
       stopIncomingSharePolling();

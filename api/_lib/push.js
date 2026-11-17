@@ -1,5 +1,7 @@
 /** Android Web Push (VAPID) */
 
+import { shareEmailLookupKeys } from "./auth.js";
+
 export function getVapidPublicKey() {
   return (process.env.VAPID_PUBLIC_KEY || "").trim();
 }
@@ -20,12 +22,15 @@ export function isPushConfigured() {
 export async function sendSharePushToEmail(admin, toEmail, payload) {
   if (!isPushConfigured()) return { sent: 0, skipped: "vapid" };
 
+  const lookupEmails = shareEmailLookupKeys(toEmail);
   const { data: rows, error } = await admin
     .from("bus_push_subscriptions")
     .select("subscription")
-    .eq("user_email", toEmail.toLowerCase());
+    .in("user_email", lookupEmails);
   if (error) throw error;
-  if (!rows?.length) return { sent: 0, skipped: "no_subscriptions" };
+  if (!rows?.length) {
+    return { sent: 0, skipped: "no_subscriptions", lookupEmails };
+  }
 
   const webpush = (await import("web-push")).default;
   webpush.setVapidDetails(
@@ -55,7 +60,7 @@ export async function sendSharePushToEmail(admin, toEmail, payload) {
       } catch (err) {
         console.error("web-push send failed", statusCode(err), err?.body || err?.message);
         const status = err?.statusCode;
-        if (status === 404 || status === 410) {
+        if (status === 404 || status === 410 || status === 403 || status === 401) {
           await admin
             .from("bus_push_subscriptions")
             .delete()

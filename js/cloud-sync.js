@@ -140,6 +140,25 @@ function createAuthStorage() {
   };
 }
 
+/** 로그아웃 후 새로고침 시 세션 잔류 방지 */
+function purgeSupabaseAuthKeys() {
+  for (const store of [window.localStorage, window.sessionStorage]) {
+    try {
+      const remove = [];
+      for (let i = 0; i < store.length; i += 1) {
+        const key = store.key(i);
+        if (!key) continue;
+        if (key.startsWith("sb-") || key.startsWith("bus-auth-mirror:")) {
+          remove.push(key);
+        }
+      }
+      remove.forEach((key) => store.removeItem(key));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {number} timeoutMs
@@ -305,7 +324,9 @@ async function initGoogleAuthUi(client, cfg) {
   logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = true;
     try {
-      await client.auth.signOut();
+      const { error } = await client.auth.signOut({ scope: "local" });
+      if (error) console.error(error);
+      purgeSupabaseAuthKeys();
       cloudSaveListenerBound = false;
       await renderSession(null);
     } catch (error) {
@@ -319,12 +340,15 @@ async function initGoogleAuthUi(client, cfg) {
   statusEl.textContent = "로그인 상태 확인 중…";
   try {
     const oauthResult = await completeOAuthReturnIfNeeded(client);
-    let session = await waitForAuthReady(client);
+    let session = (await client.auth.getSession()).data.session;
 
     if (!session?.user && oauthResult === "ok") {
       const { data: refreshed, error: refreshErr } = await client.auth.refreshSession();
       if (refreshErr) console.error(refreshErr);
       session = refreshed.session || session;
+    }
+    if (!session?.user && oauthResult === "none") {
+      session = await waitForAuthReady(client, 2500);
     }
 
     if (oauthResult === "error") {
@@ -343,20 +367,14 @@ async function initGoogleAuthUi(client, cfg) {
   }
 
   client.auth.onAuthStateChange((event, session) => {
-    if (session?.user) {
-      renderSession(session).catch(() => {});
+    if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+      cloudSaveListenerBound = false;
+      purgeSupabaseAuthKeys();
+      renderSession(null).catch(() => {});
       return;
     }
-    if (event === "SIGNED_OUT" || event === "USER_DELETED") {
-      window.setTimeout(() => {
-        client.auth.getSession().then(({ data }) => {
-          if (data.session?.user) {
-            renderSession(data.session).catch(() => {});
-          } else {
-            renderSession(null).catch(() => {});
-          }
-        });
-      }, 400);
+    if (session?.user) {
+      renderSession(session).catch(() => {});
     }
   });
 
@@ -365,6 +383,8 @@ async function initGoogleAuthUi(client, cfg) {
     if (error) return;
     if (data.session?.user) {
       await renderSession(data.session);
+    } else {
+      await renderSession(null);
     }
   }
 

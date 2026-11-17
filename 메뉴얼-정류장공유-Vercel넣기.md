@@ -23,14 +23,16 @@
 | `SUPABASE_ANON_KEY` | (기존과 같음) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API** → **service_role** (비밀, GitHub에 넣지 마세요) |
 
-### Android 푸시용 (VAPID)
+### Android 푸시용 (VAPID) — 안 하면 「공유 알림 켜기」가 아무 말도 안 함
 
-터미널에서 한 번만 (로컬):
+확인: 브라우저에서  
+**https://bus.uxpwa.com/api/push-public-key**  
+→ `"configured":false` 이면 **VAPID 3개**를 Vercel에 넣어야 합니다.
 
-```bash
-cd bus
-npx web-push generate-vapid-keys
-```
+키 만들기 (하나만 택):
+
+- PC에 Node 있으면: `cd bus` 후 `npx web-push generate-vapid-keys`
+- 또는 검색: **web push vapid key generator** → Public / Private 한 쌍 생성
 
 나온 **Public Key** / **Private Key**를 Vercel에 추가:
 

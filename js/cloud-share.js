@@ -126,12 +126,36 @@ function urlBase64ToUint8Array(base64String) {
  * @param {(text: string) => void} setStatus
  */
 export async function tryEnableAndroidPush(client, session, setStatus) {
-  if (!isAndroidPushCapable()) return;
-  if (Notification.permission === "denied") return;
+  if (!isAndroidPushCapable()) {
+    setStatus?.(
+      "Android Chrome·삼성 인터넷에서 PWA(홈 화면 추가) 후에만 푸시를 켤 수 있습니다."
+    );
+    return false;
+  }
+  if (Notification.permission === "denied") {
+    setStatus?.(
+      "알림이 꺼져 있습니다. 설정 → 앱 → 내버스시간표 → 알림을 켠 뒤 다시 시도해 주세요."
+    );
+    return false;
+  }
 
-  const cfgRes = await fetch(new URL("push-public-key", apiBase()), { cache: "no-store" });
-  const cfg = await cfgRes.json();
-  if (!cfg.configured || !cfg.publicKey) return;
+  setStatus?.("푸시 설정 확인 중…");
+  let cfg;
+  try {
+    const cfgRes = await fetch(new URL("push-public-key", apiBase()), { cache: "no-store" });
+    cfg = await cfgRes.json();
+  } catch (err) {
+    console.error(err);
+    setStatus?.("푸시 서버에 연결하지 못했습니다. 네트워크를 확인해 주세요.");
+    return false;
+  }
+
+  if (!cfg.configured || !cfg.publicKey) {
+    setStatus?.(
+      "서버에 VAPID 키가 없습니다. Vercel에 VAPID_PUBLIC_KEY·PRIVATE_KEY·SUBJECT 넣고 Redeploy (메뉴얼-정류장공유-Vercel넣기.md)."
+    );
+    return false;
+  }
 
   const perm =
     Notification.permission === "granted"
@@ -139,25 +163,49 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
       : await Notification.requestPermission();
   if (perm !== "granted") {
     setStatus?.("알림 권한이 없어 공유 푸시를 받을 수 없습니다.");
-    return;
+    return false;
   }
 
-  const reg = await navigator.serviceWorker.ready;
+  let reg;
+  try {
+    reg = await navigator.serviceWorker.ready;
+  } catch (err) {
+    console.error(err);
+    setStatus?.("앱이 준비되지 않았습니다. 홈 화면에 추가한 뒤 다시 시도해 주세요.");
+    return false;
+  }
+
   let sub = await reg.pushManager.getSubscription();
   if (!sub) {
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
-    });
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
+      });
+    } catch (err) {
+      console.error(err);
+      setStatus?.(
+        "푸시 등록에 실패했습니다. 홈 화면에 추가했는지 확인하고, 삼성 인터넷이면 최신 버전인지 확인해 주세요."
+      );
+      return false;
+    }
   }
 
-  await authFetch("push-subscribe", {
-    method: "POST",
-    body: JSON.stringify({ subscription: sub.toJSON() }),
-  });
-  setStatus?.("Android 공유 알림을 켰습니다.");
+  try {
+    await authFetch("push-subscribe", {
+      method: "POST",
+      body: JSON.stringify({ subscription: sub.toJSON() }),
+    });
+  } catch (err) {
+    console.error(err);
+    setStatus?.("푸시 구독 저장에 실패했습니다. 다시 로그인 후 시도해 주세요.");
+    return false;
+  }
+
+  setStatus?.("Android 공유 알림을 켰습니다. 이제 앱을 닫아도 공유 요청 알림을 받을 수 있습니다.");
   void session;
   void client;
+  return true;
 }
 
 /**
@@ -296,8 +344,12 @@ export function initBusShareUi(client, session, setStatus) {
       pushBtn.hidden = !isAndroidPushCapable();
       pushBtn.addEventListener("click", () => {
         pushBtn.disabled = true;
+        setStatus?.("알림 설정 중…");
         tryEnableAndroidPush(client, session, setStatus)
-          .catch((err) => console.error(err))
+          .catch((err) => {
+            console.error(err);
+            setStatus?.(describeShareError(err));
+          })
           .finally(() => {
             pushBtn.disabled = false;
           });

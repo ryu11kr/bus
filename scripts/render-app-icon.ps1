@@ -1,4 +1,4 @@
-﻿# Renders bold PWA icons (192 / 512 / maskable) — orange bg, large clock + front bus.
+﻿# PWA icons — large front bus + small clock on roof (top-right overlap).
 param(
   [string]$OutDir = (Join-Path $PSScriptRoot "..\icons")
 )
@@ -19,10 +19,57 @@ function Add-RoundedRectPath {
   $Path.CloseFigure()
 }
 
+function Draw-SmallClock {
+  param(
+    [System.Drawing.Graphics]$G,
+    [int]$Cx,
+    [int]$Cy,
+    [int]$D,
+    [System.Drawing.Color]$Bg,
+    [System.Drawing.Color]$Face
+  )
+  $half = [int]($D / 2)
+  $faceBrush = New-Object System.Drawing.SolidBrush $Face
+  $bgBrush = New-Object System.Drawing.SolidBrush $Bg
+
+  # 바깥 테두리(버스 흰색 위에서도 눈에 띔)
+  $outer = [Math]::Max(3, [int]($D / 14))
+  $outerPen = New-Object System.Drawing.Pen($Bg, $outer)
+  $G.DrawEllipse($outerPen, $Cx - $half - [int]($outer / 2), $Cy - $half - [int]($outer / 2), $D + $outer, $D + $outer)
+
+  $G.FillEllipse($faceBrush, $Cx - $half, $Cy - $half, $D, $D)
+
+  $ringW = [Math]::Max(2, [int]($D / 16))
+  $ringPen = New-Object System.Drawing.Pen($Bg, $ringW)
+  $G.DrawEllipse($ringPen, $Cx - $half + $ringW, $Cy - $half + $ringW, $D - $ringW * 2, $D - $ringW * 2)
+
+  $tickPen = New-Object System.Drawing.Pen($Bg, ([Math]::Max(1, [int]($D / 40))))
+  $tickPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $tickPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $tickR = $half - [Math]::Max(2, [int]($D / 10))
+  for ($i = 0; $i -lt 12; $i++) {
+    $ang = ($i * 30 - 90) * [Math]::PI / 180
+    $len = if ($i % 3 -eq 0) { 3 } else { 2 }
+    $x1 = $Cx + [int]([Math]::Cos($ang) * ($tickR - $len))
+    $y1 = $Cy + [int]([Math]::Sin($ang) * ($tickR - $len))
+    $x2 = $Cx + [int]([Math]::Cos($ang) * $tickR)
+    $y2 = $Cy + [int]([Math]::Sin($ang) * $tickR)
+    $G.DrawLine($tickPen, $x1, $y1, $x2, $y2)
+  }
+
+  $handPen = New-Object System.Drawing.Pen($Bg, ([Math]::Max(2, [int]($D / 11))))
+  $handPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $handPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $G.DrawLine($handPen, $Cx, $Cy, $Cx + [int]($D * 0.12), $Cy - [int]($D * 0.22))
+  $G.DrawLine($handPen, $Cx, $Cy, $Cx + [int]($D * 0.26), $Cy + [int]($D * 0.1))
+  $dot = [Math]::Max(2, [int]($D / 12))
+  $G.FillEllipse($bgBrush, $Cx - $dot, $Cy - $dot, $dot * 2, $dot * 2)
+}
+
 function New-BusClockIcon {
   param(
     [int]$Size,
-    [double]$PadRatio = 0.1,
+    [double]$PadRatio = 0.08,
     [string]$BgHex = "#F97316"
   )
 
@@ -41,91 +88,64 @@ function New-BusClockIcon {
   $whiteBrush = New-Object System.Drawing.SolidBrush $white
   $bgBrush = New-Object System.Drawing.SolidBrush $bg
 
-  # —— 시계 (크게, 상단 중앙) ——
-  $clockD = [int]($inner * 0.62)
-  $cx = $pad + [int]($inner * 0.5)
-  $cy = $pad + [int]($inner * 0.36)
-  $half = [int]($clockD / 2)
-  $g.FillEllipse($whiteBrush, $cx - $half, $cy - $half, $clockD, $clockD)
-
-  $ringW = [Math]::Max(4, [int]($Size / 56))
-  $ringPen = New-Object System.Drawing.Pen($bg, $ringW)
-  $g.DrawEllipse($ringPen, $cx - $half + $ringW, $cy - $half + $ringW, $clockD - $ringW * 2, $clockD - $ringW * 2)
-
-  $tickPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(2, [int]($Size / 128))))
-  $tickPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $tickPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $tickR = $half - [int]($Size / 40)
-  for ($i = 0; $i -lt 12; $i++) {
-    $ang = ($i * 30 - 90) * [Math]::PI / 180
-    $x1 = $cx + [int]([Math]::Cos($ang) * ($tickR - [int]($Size / 80)))
-    $y1 = $cy + [int]([Math]::Sin($ang) * ($tickR - [int]($Size / 80)))
-    $x2 = $cx + [int]([Math]::Cos($ang) * $tickR)
-    $y2 = $cy + [int]([Math]::Sin($ang) * $tickR)
-    $g.DrawLine($tickPen, $x1, $y1, $x2, $y2)
-  }
-
-  $handPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(5, [int]($Size / 36))))
-  $handPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $handPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $hl = $clockD * 0.26
-  $ml = $clockD * 0.36
-  $g.DrawLine($handPen, $cx, $cy, $cx + $hl * 0.55, $cy - $hl)
-  $g.DrawLine($handPen, $cx, $cy, $cx + $ml * 0.9, $cy + $ml * 0.38)
-  $g.FillEllipse($bgBrush, $cx - [int]($Size / 42), $cy - [int]($Size / 42), [int]($Size / 21), [int]($Size / 21))
-
-  # —— 버스 정면 (하단, 큼직하게) ——
-  $busW = [int]($inner * 0.8)
-  $busH = [int]($inner * 0.4)
+  # —— 버스 정면 (아이콘 대부분) ——
+  $busW = [int]($inner * 0.92)
+  $busH = [int]($inner * 0.72)
   $bx = $pad + [int](($inner - $busW) / 2)
-  $by = $pad + [int]($inner * 0.52)
-  $busRad = [Math]::Max(10, [int]($Size / 22))
+  $by = $pad + [int]($inner * 0.24)
+  $busRad = [Math]::Max(12, [int]($Size / 18))
 
   $bodyPath = New-Object System.Drawing.Drawing2D.GraphicsPath
   $bodyR = New-Object System.Drawing.Rectangle $bx, $by, $busW, $busH
   Add-RoundedRectPath -Path $bodyPath -R $bodyR -Radius $busRad
   $g.FillPath($whiteBrush, $bodyPath)
 
-  # 앞 유리 (넓은 정면 유리)
-  $glassW = [int]($busW * 0.78)
-  $glassH = [int]($busH * 0.4)
+  # 앞 유리
+  $glassW = [int]($busW * 0.82)
+  $glassH = [int]($busH * 0.38)
   $gx = $bx + [int](($busW - $glassW) / 2)
-  $gy = $by + [int]($busH * 0.1)
-  $glassRad = [Math]::Max(6, [int]($Size / 48))
+  $gy = $by + [int]($busH * 0.14)
+  $glassRad = [Math]::Max(8, [int]($Size / 40))
   $glassPath = New-Object System.Drawing.Drawing2D.GraphicsPath
   $glassR = New-Object System.Drawing.Rectangle $gx, $gy, $glassW, $glassH
   Add-RoundedRectPath -Path $glassPath -R $glassR -Radius $glassRad
   $g.FillPath($bgBrush, $glassPath)
 
-  # 그릴 세로줄 (정면 느낌)
-  $grillPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(3, [int]($Size / 72))))
+  # 그릴
+  $grillPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(3, [int]($Size / 64))))
   $grillPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
   $grillPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $grillY1 = $by + [int]($busH * 0.58)
-  $grillY2 = $by + [int]($busH * 0.78)
+  $grillY1 = $by + [int]($busH * 0.6)
+  $grillY2 = $by + [int]($busH * 0.82)
   $grillCx = $bx + [int]($busW / 2)
-  $grillSpan = [int]($busW * 0.08)
+  $grillSpan = [int]($busW * 0.09)
   foreach ($dx in @(-$grillSpan, 0, $grillSpan)) {
     $g.DrawLine($grillPen, $grillCx + $dx, $grillY1, $grillCx + $dx, $grillY2)
   }
 
-  # 헤드라이트 (좌·우 큰 원)
-  $lightR = [Math]::Max(7, [int]($Size / 30))
-  $ly = $by + [int]($busH * 0.55)
-  $lxL = $bx + [int]($busW * 0.12)
-  $lxR = $bx + $busW - [int]($busW * 0.12) - $lightR * 2
+  # 헤드라이트
+  $lightR = [Math]::Max(8, [int]($Size / 28))
+  $ly = $by + [int]($busH * 0.56)
+  $lxL = $bx + [int]($busW * 0.1)
+  $lxR = $bx + $busW - [int]($busW * 0.1) - $lightR * 2
   $g.FillEllipse($whiteBrush, $lxL, $ly, $lightR * 2, $lightR * 2)
   $g.FillEllipse($whiteBrush, $lxR, $ly, $lightR * 2, $lightR * 2)
-  $g.FillEllipse($bgBrush, $lxL + [int]($lightR * 0.32), $ly + [int]($lightR * 0.32), [int]($lightR * 1.35), [int]($lightR * 1.35))
-  $g.FillEllipse($bgBrush, $lxR + [int]($lightR * 0.32), $ly + [int]($lightR * 0.32), [int]($lightR * 1.35), [int]($lightR * 1.35))
+  $g.FillEllipse($bgBrush, $lxL + [int]($lightR * 0.3), $ly + [int]($lightR * 0.3), [int]($lightR * 1.4), [int]($lightR * 1.4))
+  $g.FillEllipse($bgBrush, $lxR + [int]($lightR * 0.3), $ly + [int]($lightR * 0.3), [int]($lightR * 1.4), [int]($lightR * 1.4))
 
   # 범퍼
-  $bumperH = [Math]::Max(4, [int]($Size / 48))
+  $bumperH = [Math]::Max(5, [int]($Size / 44))
   $bumperPen = New-Object System.Drawing.Pen($bg, $bumperH)
   $bumperPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
   $bumperPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $bumY = $by + $busH - [int]($busH * 0.12)
-  $g.DrawLine($bumperPen, $bx + [int]($busW * 0.1), $bumY, $bx + $busW - [int]($busW * 0.1), $bumY)
+  $bumY = $by + $busH - [int]($busH * 0.1)
+  $g.DrawLine($bumperPen, $bx + [int]($busW * 0.08), $bumY, $bx + $busW - [int]($busW * 0.08), $bumY)
+
+  # —— 작은 시계: 천장 우측에 겹침 (버스 뒤에 그리지 않고 위에) ——
+  $clockD = [int]($inner * 0.3)
+  $clockCx = $bx + $busW - [int]($clockD * 0.42)
+  $clockCy = $by + [int]($clockD * 0.38)
+  Draw-SmallClock -G $g -Cx $clockCx -Cy $clockCy -D $clockD -Bg $bg -Face $white
 
   $g.Dispose()
   return $bmp
@@ -138,13 +158,13 @@ function Save-Icon([System.Drawing.Bitmap]$bmp, [string]$path) {
 }
 
 $out = (Resolve-Path $OutDir).Path
-$bmp512 = New-BusClockIcon -Size 512 -PadRatio 0.08
+$bmp512 = New-BusClockIcon -Size 512 -PadRatio 0.07
 Save-Icon $bmp512 (Join-Path $out "icon-512.png")
 
-$bmp192 = New-BusClockIcon -Size 192 -PadRatio 0.08
+$bmp192 = New-BusClockIcon -Size 192 -PadRatio 0.07
 Save-Icon $bmp192 (Join-Path $out "icon-192.png")
 
-$bmpMask = New-BusClockIcon -Size 512 -PadRatio 0.18
+$bmpMask = New-BusClockIcon -Size 512 -PadRatio 0.17
 Save-Icon $bmpMask (Join-Path $out "icon-maskable-512.png")
 
 $bmp512.Dispose()

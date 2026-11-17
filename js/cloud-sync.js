@@ -1,11 +1,14 @@
-/** 클라우드 동기화 — 스텝 2: Supabase 런타임 설정만 로드 (동기화·로그인 미연동) */
+/** 클라우드 동기화 — 스텝 3: 구글 로그인( Supabase Auth ), 데이터 동기화는 미연동 */
+
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
   enabled: false,
   showTeaser: true,
+  showGoogleLogin: true,
   teaserTitle: "다른 폰에서도 보기",
   teaserMessage:
-    "구글 로그인으로 시간표를 안전하게 보관하는 기능을 준비 중입니다. 지금은 이 기기에만 저장됩니다.",
+    "구글 계정으로 로그인해 두면, 나중에 다른 폰에서도 시간표를 불러올 수 있게 준비 중입니다. 지금 저장되는 데이터는 이 기기에만 있습니다.",
 };
 
 /**
@@ -20,6 +23,7 @@ async function loadCloudSyncConfig() {
     if (typeof data === "object" && data) {
       if (typeof data.enabled === "boolean") cfg.enabled = data.enabled;
       if (typeof data.showTeaser === "boolean") cfg.showTeaser = data.showTeaser;
+      if (typeof data.showGoogleLogin === "boolean") cfg.showGoogleLogin = data.showGoogleLogin;
       if (typeof data.teaserTitle === "string" && data.teaserTitle.trim()) {
         cfg.teaserTitle = data.teaserTitle.trim();
       }
@@ -39,6 +43,9 @@ async function loadCloudSyncConfig() {
 
 /** @type {CloudSyncRuntime | null} */
 let cloudSyncRuntime = null;
+
+/** @type {import("@supabase/supabase-js").SupabaseClient | null} */
+let supabaseClient = null;
 
 /**
  * @returns {Promise<CloudSyncRuntime | null>}
@@ -62,13 +69,108 @@ async function loadCloudSyncRuntime() {
   }
 }
 
-/** @returns {CloudSyncRuntime | null} */
-function getCloudSyncRuntime() {
-  return cloudSyncRuntime;
+/**
+ * @returns {import("@supabase/supabase-js").SupabaseClient | null}
+ */
+function getSupabaseClient() {
+  return supabaseClient;
 }
 
-if (typeof window !== "undefined") {
-  window.getCloudSyncRuntime = getCloudSyncRuntime;
+window.getCloudSyncRuntime = () => cloudSyncRuntime;
+window.getSupabaseClient = () => supabaseClient;
+
+function authRedirectUrl() {
+  const path = window.location.pathname || "/";
+  if (path.endsWith("/index.html")) {
+    return `${window.location.origin}${path.replace(/index\.html$/i, "")}`;
+  }
+  return `${window.location.origin}${path}`;
+}
+
+function formatSignedInLabel(user) {
+  if (!user) return "로그인됐습니다.";
+  const meta = user.user_metadata || {};
+  const name = meta.full_name || meta.name;
+  const email = user.email;
+  if (name && email) return `${name} (${email})`;
+  if (email) return email;
+  return "구글 계정으로 로그인됨";
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {typeof DEFAULT_CLOUD_SYNC_CONFIG} cfg
+ */
+async function initGoogleAuthUi(client, cfg) {
+  const authRoot = document.querySelector("#cloud-sync-auth");
+  const statusEl = document.querySelector("#cloud-sync-auth-status");
+  const loginBtn = document.querySelector("#cloud-sync-google-login");
+  const logoutBtn = document.querySelector("#cloud-sync-logout");
+  if (!authRoot || !statusEl || !loginBtn || !logoutBtn) return;
+
+  if (!cfg.showGoogleLogin || !cloudSyncRuntime?.configured) {
+    authRoot.hidden = true;
+    return;
+  }
+
+  authRoot.hidden = false;
+
+  /** @param {import("@supabase/supabase-js").Session | null} session */
+  function renderSession(session) {
+    const signedIn = Boolean(session?.user);
+    loginBtn.hidden = signedIn;
+    logoutBtn.hidden = !signedIn;
+    if (signedIn) {
+      statusEl.textContent = formatSignedInLabel(session.user);
+    } else {
+      statusEl.textContent =
+        "로그인해 두면 나중에 다른 폰·PC에서 같은 시간표를 쓸 준비가 됩니다. (아직 옮기기는 다음 단계)";
+    }
+  }
+
+  loginBtn.addEventListener("click", async () => {
+    loginBtn.disabled = true;
+    statusEl.textContent = "구글 로그인 화면으로 이동합니다…";
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: authRedirectUrl() },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error(error);
+      statusEl.textContent =
+        "로그인을 시작하지 못했습니다. Supabase·구글 설정을 확인하거나 잠시 후 다시 시도해 주세요.";
+      loginBtn.disabled = false;
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    logoutBtn.disabled = true;
+    try {
+      await client.auth.signOut();
+      renderSession(null);
+    } catch (error) {
+      console.error(error);
+      statusEl.textContent = "로그아웃하지 못했습니다. 다시 시도해 주세요.";
+    } finally {
+      logoutBtn.disabled = false;
+    }
+  });
+
+  statusEl.textContent = "로그인 상태 확인 중…";
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    renderSession(data.session);
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = "로그인을 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
+  }
+
+  client.auth.onAuthStateChange((_event, session) => {
+    renderSession(session);
+  });
 }
 
 async function initCloudSyncShell() {
@@ -93,12 +195,17 @@ async function initCloudSyncShell() {
 
   root.dataset.cloudSyncEnabled = cfg.enabled ? "true" : "false";
   root.dataset.cloudSyncConfigured = cloudSyncRuntime?.configured ? "true" : "false";
+
+  if (cloudSyncRuntime?.configured && cfg.showGoogleLogin) {
+    supabaseClient = createClient(cloudSyncRuntime.supabaseUrl, cloudSyncRuntime.supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
+      },
+    });
+    await initGoogleAuthUi(supabaseClient, cfg);
+  }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    initCloudSyncShell().catch(() => {});
-  });
-} else {
-  initCloudSyncShell().catch(() => {});
-}
+initCloudSyncShell().catch(() => {});

@@ -72,9 +72,18 @@
           <details id="cloud-sync-teaser" class="home-more panel-lite cloud-sync-teaser">
             <summary>다른 폰에서도 보기</summary>
             <p class="cloud-sync-teaser-msg">
-              구글 로그인으로 시간표를 안전하게 보관하는 기능을 준비 중입니다. 지금은 이
-              기기에만 저장됩니다.
+              구글 계정으로 로그인해 두면, 나중에 다른 폰에서도 시간표를 불러올 수 있게 준비
+              중입니다. 지금 저장되는 데이터는 이 기기에만 있습니다.
             </p>
+            <div id="cloud-sync-auth" class="cloud-sync-auth" hidden>
+              <p id="cloud-sync-auth-status" class="cloud-sync-auth-status" aria-live="polite"></p>
+              <button type="button" id="cloud-sync-google-login" class="big-btn secondary">
+                구글로 로그인
+              </button>
+              <button type="button" id="cloud-sync-logout" class="big-btn ghost" hidden>
+                로그아웃
+              </button>
+            </div>
           </details>
 
           <div class="big-actions list-actions">
@@ -243,6 +252,6 @@
     </dialog>
 
     <script src="./js/app.js"></script>
-    <script src="./js/cloud-sync.js"></script>
+    <script type="module" src="./js/cloud-sync.js"></script>
   </body>
 </html>

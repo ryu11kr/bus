@@ -17,6 +17,27 @@ function setSyncStatus(text) {
   syncStatusCb?.(text || "");
 }
 
+function busPhotosApi() {
+  return typeof window !== "undefined" ? window.BusStopPhotos : null;
+}
+
+function getStopPhotos(stop) {
+  const api = busPhotosApi();
+  if (api) return api.getStopPhotos(stop);
+  if (!stop) return [];
+  if (Array.isArray(stop.photos) && stop.photos.length) return stop.photos;
+  if (typeof stop.photoThumb === "string" && stop.photoThumb) {
+    return [{ id: `${stop.id}-legacy`, photoThumb: stop.photoThumb, updatedAt: stop.updatedAt }];
+  }
+  return [];
+}
+
+function mergeStopRecord(local, remote) {
+  const api = busPhotosApi();
+  if (api?.mergeStopRecord) return api.mergeStopRecord(local, remote);
+  return new Date(String(remote.updatedAt)) >= new Date(String(local.updatedAt)) ? remote : local;
+}
+
 function dataUrlToBlob(dataUrl) {
   const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
   if (!match) return null;
@@ -27,8 +48,8 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
-function photoStoragePath(userId, stopId) {
-  return `${userId}/${stopId}.jpg`;
+function photoStoragePath(userId, stopId, photoId) {
+  return `${userId}/${stopId}/${photoId}.jpg`;
 }
 
 function isDataUrl(src) {
@@ -48,26 +69,20 @@ async function blobToDataUrl(blob) {
   });
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} client
- * @param {string} path
- */
 async function downloadPhotoAsDataUrl(client, path) {
   const { data, error } = await client.storage.from(BUS_PHOTOS_BUCKET).download(path);
   if (error || !data) throw error || new Error("download failed");
   return blobToDataUrl(data);
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} client
- * @param {string} userId
- * @param {{ id: string, photoThumb: string }} stop
- */
-async function uploadStopPhoto(client, userId, stop) {
-  if (!isDataUrl(stop.photoThumb)) return photoStoragePath(userId, stop.id);
-  const blob = dataUrlToBlob(stop.photoThumb);
+async function uploadOnePhoto(client, userId, stopId, photo) {
+  if (!isDataUrl(photo.photoThumb)) {
+    if (photo.photoPath) return photo.photoPath;
+    return photoStoragePath(userId, stopId, photo.id);
+  }
+  const blob = dataUrlToBlob(photo.photoThumb);
   if (!blob) throw new Error("invalid photo");
-  const path = photoStoragePath(userId, stop.id);
+  const path = photoStoragePath(userId, stopId, photo.id);
   const { error } = await client.storage.from(BUS_PHOTOS_BUCKET).upload(path, blob, {
     upsert: true,
     contentType: blob.type || "image/jpeg",
@@ -77,78 +92,90 @@ async function uploadStopPhoto(client, userId, stop) {
 }
 
 /**
- * @typedef {{ id: string, name: string, photoThumb: string, ocrText: string, sections: unknown[], updatedAt: string, photoPath?: string }} LocalStop
- */
-
-/**
- * @param {LocalStop[]} localStops
- * @param {Array<Record<string, unknown>>} remoteStops
- * @returns {LocalStop[]}
- */
-export function mergeStopsByUpdatedAt(localStops, remoteStops) {
-  const byId = new Map();
-  for (const s of localStops || []) {
-    if (s?.id) byId.set(String(s.id), s);
-  }
-  for (const raw of remoteStops || []) {
-    if (!raw || typeof raw !== "object" || !raw.id) continue;
-    const id = String(raw.id);
-    const remote = {
-      id,
-      name: String(raw.name || ""),
-      photoThumb: typeof raw.photoThumb === "string" ? raw.photoThumb : "",
-      photoPath: typeof raw.photoPath === "string" ? raw.photoPath : "",
-      ocrText: typeof raw.ocrText === "string" ? raw.ocrText : "",
-      sections: Array.isArray(raw.sections) ? raw.sections : [],
-      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString(),
-    };
-    const existing = byId.get(id);
-    if (!existing) {
-      byId.set(id, remote);
-      continue;
-    }
-    const tLocal = new Date(existing.updatedAt || 0).getTime();
-    const tRemote = new Date(remote.updatedAt || 0).getTime();
-    byId.set(id, tRemote >= tLocal ? { ...remote, photoThumb: remote.photoThumb || existing.photoThumb } : existing);
-  }
-  return Array.from(byId.values()).filter((s) => s.name && (s.photoThumb || s.photoPath));
-}
-
-/**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {Array<Record<string, unknown>>} cloudStops
  */
 async function hydrateRemoteStops(client, cloudStops) {
-  /** @type {LocalStop[]} */
+  /** @type {Record<string, unknown>[]} */
   const out = [];
   for (const raw of cloudStops || []) {
     if (!raw?.id) continue;
-    let photoThumb = typeof raw.photoThumb === "string" ? raw.photoThumb : "";
-    const photoPath = typeof raw.photoPath === "string" ? raw.photoPath : "";
-    if (!photoThumb && photoPath) {
+    const stopId = String(raw.id);
+    const name = String(raw.name || "");
+
+    /** @type {Record<string, unknown>[]} */
+    let photoEntries = [];
+    if (Array.isArray(raw.photos) && raw.photos.length) {
+      photoEntries = raw.photos;
+    } else if (raw.photoPath || raw.photoThumb) {
+      photoEntries = [
+        {
+          id: `${stopId}-legacy`,
+          photoPath: raw.photoPath,
+          photoThumb: raw.photoThumb,
+          ocrText: raw.ocrText,
+          sections: raw.sections,
+          updatedAt: raw.updatedAt,
+        },
+      ];
+    }
+
+  const photos = [];
+  for (const pr of photoEntries) {
+    if (!pr || typeof pr !== "object") continue;
+    const photoId = String(pr.id || `${stopId}-ph`);
+    let photoThumb = typeof pr.photoThumb === "string" ? pr.photoThumb : "";
+    if (!photoThumb && typeof pr.photoPath === "string" && pr.photoPath) {
       try {
-        photoThumb = await downloadPhotoAsDataUrl(client, photoPath);
+        photoThumb = await downloadPhotoAsDataUrl(client, pr.photoPath);
       } catch (error) {
         console.error(error);
       }
     }
     if (!photoThumb) continue;
-    out.push({
-      id: String(raw.id),
-      name: String(raw.name || ""),
+    photos.push({
+      id: photoId,
       photoThumb,
-      ocrText: typeof raw.ocrText === "string" ? raw.ocrText : "",
-      sections: Array.isArray(raw.sections) ? raw.sections : [],
-      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+      ocrText: typeof pr.ocrText === "string" ? pr.ocrText : "",
+      sections: Array.isArray(pr.sections) ? pr.sections : [],
+      updatedAt: typeof pr.updatedAt === "string" ? pr.updatedAt : new Date().toISOString(),
+    });
+  }
+
+    if (!photos.length) continue;
+    out.push({
+      id: stopId,
+      name,
+      photos,
+      photoThumb: photos[photos.length - 1].photoThumb,
+      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : photos.at(-1).updatedAt,
     });
   }
   return out;
 }
 
 /**
- * @param {import("@supabase/supabase-js").SupabaseClient} client
- * @param {string} userId
+ * @param {Record<string, unknown>[]} localStops
+ * @param {Record<string, unknown>[]} remoteStops
  */
+export function mergeStopsByUpdatedAt(localStops, remoteStops) {
+  const byId = new Map();
+  for (const s of localStops || []) {
+    if (s?.id) byId.set(String(s.id), s);
+  }
+  for (const remote of remoteStops || []) {
+    if (!remote?.id) continue;
+    const id = String(remote.id);
+    const local = byId.get(id);
+    if (!local) {
+      byId.set(id, remote);
+      continue;
+    }
+    byId.set(id, mergeStopRecord(local, remote));
+  }
+  return Array.from(byId.values()).filter((s) => s.name && getStopPhotos(s).length);
+}
+
 export async function pullAndMergeCloudState(client, userId) {
   const { data, error } = await client
     .from("bus_user_data")
@@ -165,9 +192,7 @@ export async function pullAndMergeCloudState(client, userId) {
   const localStops = Array.isArray(localState.stops) ? localState.stops : [];
 
   if (!data?.stops || !Array.isArray(data.stops) || !data.stops.length) {
-    if (localStops.length) {
-      scheduleCloudPush(client, userId, 400);
-    }
+    if (localStops.length) scheduleCloudPush(client, userId, 400);
     return;
   }
 
@@ -190,15 +215,9 @@ export async function pullAndMergeCloudState(client, userId) {
     (max, s) => Math.max(max, new Date(s.updatedAt || 0).getTime()),
     0
   );
-  if (localMax > remoteUpdated) {
-    scheduleCloudPush(client, userId, 400);
-  }
+  if (localMax > remoteUpdated) scheduleCloudPush(client, userId, 400);
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} client
- * @param {string} userId
- */
 export async function pushLocalStateToCloud(client, userId) {
   const getLocal = window.busAppGetLocalStopState;
   if (typeof getLocal !== "function") return;
@@ -209,7 +228,7 @@ export async function pushLocalStateToCloud(client, userId) {
     await client.from("bus_user_data").upsert({
       user_id: userId,
       stops: [],
-      schema_version: 2,
+      schema_version: 3,
       updated_at: new Date().toISOString(),
     });
     setSyncStatus("클라우드와 맞춤 (저장된 정류장 없음)");
@@ -231,21 +250,35 @@ export async function pushLocalStateToCloud(client, userId) {
   const cloudStops = [];
   for (const stop of stops) {
     if (!stop?.id || !stop.name) continue;
-    let photoPath = "";
-    if (isDataUrl(stop.photoThumb)) {
-      photoPath = await uploadStopPhoto(client, userId, stop);
-    } else if (isHttpUrl(stop.photoThumb)) {
-      photoPath = photoStoragePath(userId, stop.id);
-    } else {
-      continue;
+    const photos = getStopPhotos(stop);
+    if (!photos.length) continue;
+
+    /** @type {Record<string, unknown>[]} */
+    const cloudPhotos = [];
+    for (const photo of photos) {
+      let photoPath = "";
+      if (isDataUrl(photo.photoThumb)) {
+        photoPath = await uploadOnePhoto(client, userId, String(stop.id), photo);
+      } else if (isHttpUrl(photo.photoThumb)) {
+        photoPath = photoStoragePath(userId, String(stop.id), String(photo.id));
+      } else {
+        continue;
+      }
+      cloudPhotos.push({
+        id: photo.id,
+        ocrText: photo.ocrText || "",
+        sections: photo.sections || [],
+        updatedAt: photo.updatedAt || stop.updatedAt,
+        photoPath,
+      });
     }
+    if (!cloudPhotos.length) continue;
+
     cloudStops.push({
       id: stop.id,
       name: stop.name,
-      ocrText: stop.ocrText || "",
-      sections: stop.sections || [],
+      photos: cloudPhotos,
       updatedAt: stop.updatedAt || new Date().toISOString(),
-      photoPath,
     });
   }
 
@@ -257,7 +290,7 @@ export async function pushLocalStateToCloud(client, userId) {
   const { error } = await client.from("bus_user_data").upsert({
     user_id: userId,
     stops: cloudStops,
-    schema_version: 2,
+    schema_version: 3,
     updated_at: new Date(updatedAt || Date.now()).toISOString(),
   });
   if (error) throw error;
@@ -276,10 +309,6 @@ export function scheduleCloudPush(client, userId, delayMs = 1500) {
   }, delayMs);
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} client
- * @param {string} userId
- */
 export async function runFullCloudSync(client, userId) {
   if (syncInFlight) return syncInFlight;
   syncInFlight = (async () => {

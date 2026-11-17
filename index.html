@@ -117,8 +117,14 @@
         <h2 id="detail-stop-name" class="detail-stop-name"></h2>
         <p id="detail-updated" class="detail-meta"></p>
 
+        <ul
+          id="detail-photo-tabs"
+          class="detail-photo-tabs"
+          aria-label="이 정류장 시간표 사진 목록"
+        ></ul>
+
         <figure class="detail-photo-wrap detail-photo-primary panel-lite">
-          <p class="detail-photo-label">시간표 사진</p>
+          <p class="detail-photo-label" id="detail-photo-label">시간표 사진</p>
           <button
             type="button"
             id="btn-expand-photo"
@@ -141,8 +147,17 @@
         </div>
 
         <div class="helper-actions">
-          <button type="button" id="btn-replace-photo" class="big-btn primary">
-            사진 다시 찍기 (시간표 변경된 경우)
+          <button type="button" id="btn-add-photo-camera" class="big-btn primary">
+            시간표 사진 추가 (카메라)
+          </button>
+          <button type="button" id="btn-add-photo-album" class="big-btn secondary">
+            시간표 사진 추가 (앨범)
+          </button>
+          <button type="button" id="btn-replace-photo" class="big-btn secondary">
+            지금 보는 사진만 다시 찍기
+          </button>
+          <button type="button" id="btn-delete-photo" class="big-btn ghost danger-text">
+            지금 보는 사진만 삭제
           </button>
           <button type="button" id="btn-rename-stop" class="big-btn secondary">
             정류장 이름 바꾸기
@@ -261,6 +276,7 @@
       </footer>
     </dialog>
 
+    <script src="./js/stop-photos.js"></script>
     <script src="./js/app.js"></script>
     <script type="module" src="./js/cloud-sync.js"></script>
   </body>

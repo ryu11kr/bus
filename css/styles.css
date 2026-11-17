@@ -1079,6 +1079,37 @@ body.bus-app button.detail-photo-hit:focus-visible {
   pointer-events: none;
 }
 
+.detail-photo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
+}
+
+.detail-photo-tabs[hidden] {
+  display: none;
+}
+
+.detail-photo-tab {
+  min-height: 2.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--bg-raised);
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.detail-photo-tab.is-active {
+  border-color: #0284c7;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
 .detail-photo-hint {
   margin: 0.65rem 0 0;
   font-size: 1.12rem;

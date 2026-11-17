@@ -52,6 +52,10 @@ const DEFAULT_AI_ENDPOINT = "/api/ocr-refine";
 let busStops = [];
 /** @type {string | null} */
 let activeStopId = null;
+/** @type {string | null} */
+let activePhotoId = null;
+/** @type {string | null} */
+let replacePhotoId = null;
 /** @type {{ photoThumb: string, ocrText: string, sections: { title: string | null, lines: string[] }[] } | null} */
 let pendingStopDraft = null;
 /** @type {"new" | "replace" | "rename" | null} */
@@ -256,6 +260,9 @@ function bindBusUi() {
   const btnBack = document.querySelector("#btn-back-list");
   const btnRename = document.querySelector("#btn-rename-stop");
   const btnReplace = document.querySelector("#btn-replace-photo");
+  const btnAddCamera = document.querySelector("#btn-add-photo-camera");
+  const btnAddAlbum = document.querySelector("#btn-add-photo-album");
+  const btnDeletePhoto = document.querySelector("#btn-delete-photo");
   const btnDelete = document.querySelector("#btn-delete-stop");
   const nameDialog = document.querySelector("#stop-name-dialog");
   const nameForm = document.querySelector("#stop-name-form");
@@ -278,6 +285,7 @@ function bindBusUi() {
   });
   btnBack?.addEventListener("click", () => {
     activeStopId = null;
+    activePhotoId = null;
     showListView();
     setBusStatus("");
   });
@@ -289,13 +297,63 @@ function bindBusUi() {
     openStopNameDialog(stop.name);
   });
 
+  function beginAddPhoto(useCamera) {
+    const stop = getActiveStop();
+    if (!stop) return;
+    if (getStopPhotos(stop).length >= maxPhotosPerStop()) {
+      setBusStatus(`한 정류장에는 사진 ${maxPhotosPerStop()}장까지 넣을 수 있습니다.`);
+      return;
+    }
+    pendingStopAction = "add-photo";
+    replaceStopId = stop.id;
+    replacePhotoId = null;
+    const input = document.querySelector(useCamera ? "#file-camera" : "#file-album");
+    if (input) input.value = "";
+    input?.click();
+  }
+
+  btnAddCamera?.addEventListener("click", () => beginAddPhoto(true));
+  btnAddAlbum?.addEventListener("click", () => beginAddPhoto(false));
+
   btnReplace?.addEventListener("click", () => {
     const stop = getActiveStop();
     if (!stop) return;
-    pendingStopAction = "replace";
+    pendingStopAction = "replace-photo";
     replaceStopId = stop.id;
+    replacePhotoId = getActivePhoto(stop)?.id || null;
     const useCamera = window.confirm("확인 = 카메라로 찍기\n취소 = 앨범에서 고르기");
-    document.querySelector(useCamera ? "#file-camera" : "#file-album")?.click();
+    const input = document.querySelector(useCamera ? "#file-camera" : "#file-album");
+    if (input) input.value = "";
+    input?.click();
+  });
+
+  btnDeletePhoto?.addEventListener("click", () => {
+    const stop = getActiveStop();
+    const photo = getActivePhoto(stop);
+    if (!stop || !photo) return;
+    const photos = getStopPhotos(stop);
+    if (photos.length <= 1) {
+      if (!window.confirm(`"${stop.name}" 정류장의 마지막 사진입니다. 정류장 전체를 삭제할까요?`)) {
+        return;
+      }
+      busStops = busStops.filter((s) => s.id !== stop.id);
+      activeStopId = null;
+      activePhotoId = null;
+      saveBusState();
+      showListView();
+      renderStopList();
+      setBusStatus("정류장을 삭제했습니다.");
+      return;
+    }
+    if (!window.confirm("지금 보고 있는 사진만 삭제할까요?")) return;
+    stop.photos = photos.filter((p) => p.id !== photo.id);
+    stop.updatedAt = new Date().toISOString();
+    normalizeStopPhotos(stop);
+    activePhotoId = getStopPhotos(stop).at(-1)?.id || null;
+    saveBusState();
+    renderStopDetail(stop.id);
+    renderStopList();
+    setBusStatus("사진을 삭제했습니다.");
   });
 
   btnDelete?.addEventListener("click", () => {
@@ -314,6 +372,7 @@ function bindBusUi() {
     pendingStopDraft = null;
     pendingStopAction = null;
     replaceStopId = null;
+    replacePhotoId = null;
     nameDialog?.close();
   });
 
@@ -333,16 +392,6 @@ function bindBusUi() {
         renderStopList();
         setBusStatus("이름을 바꿨습니다.");
       }
-    } else if (pendingStopAction === "replace" && replaceStopId && pendingStopDraft) {
-      const stop = busStops.find((s) => s.id === replaceStopId);
-      if (stop) {
-        applyDraftToStop(stop, pendingStopDraft, name);
-        saveBusState();
-        activeStopId = stop.id;
-        renderStopDetail(stop.id);
-        renderStopList();
-        setBusStatus("사진을 바꿨습니다.");
-      }
     } else if (pendingStopAction === "new" && pendingStopDraft) {
       const stop = createStopFromDraft(pendingStopDraft, name);
       busStops.unshift(stop);
@@ -356,6 +405,7 @@ function bindBusUi() {
     pendingStopDraft = null;
     pendingStopAction = null;
     replaceStopId = null;
+    replacePhotoId = null;
     nameDialog?.close();
   });
 }
@@ -521,10 +571,11 @@ function bindPhotoViewer() {
 
   function openPhotoViewer() {
     const stop = getActiveStop();
-    if (!stop?.photoThumb) return;
+    const photo = getActivePhoto(stop);
+    if (!photo?.photoThumb) return;
     titleEl.textContent = stop.name;
     img.alt = `${stop.name} 버스 시간표 사진`;
-    const src = stop.photoThumb;
+    const src = photo.photoThumb;
     const onReady = () => {
       lockPageForPhotoViewer();
       if (typeof dialog.showModal === "function") dialog.showModal();
@@ -683,6 +734,47 @@ function newStopId() {
   return `stop-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function getStopPhotos(stop) {
+  return window.BusStopPhotos?.getStopPhotos(stop) || [];
+}
+
+function normalizeStopPhotos(stop) {
+  if (window.BusStopPhotos?.normalizeStopPhotos) {
+    return window.BusStopPhotos.normalizeStopPhotos(stop);
+  }
+  return stop;
+}
+
+function maxPhotosPerStop() {
+  return window.BusStopPhotos?.MAX_PHOTOS_PER_STOP ?? 12;
+}
+
+function getActivePhoto(stop) {
+  const photos = getStopPhotos(stop);
+  if (!photos.length) return null;
+  if (activePhotoId) {
+    const hit = photos.find((p) => p.id === activePhotoId);
+    if (hit) return hit;
+  }
+  return photos[photos.length - 1];
+}
+
+function getStopCoverThumb(stop) {
+  const photos = getStopPhotos(stop);
+  const p = photos[photos.length - 1] || photos[0];
+  return p?.photoThumb || (typeof stop.photoThumb === "string" ? stop.photoThumb : "");
+}
+
+function photoFromDraft(draft) {
+  return {
+    id: newStopId(),
+    photoThumb: draft.photoThumb,
+    ocrText: draft.ocrText || "",
+    sections: Array.isArray(draft.sections) ? draft.sections : [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function loadBusState() {
   try {
     const raw = localStorage.getItem(BUS_STORAGE_KEY);
@@ -693,17 +785,27 @@ function loadBusState() {
     const data = JSON.parse(raw);
     if (Array.isArray(data.stops)) {
       busStops = data.stops
-        .filter((s) => s && typeof s.name === "string" && typeof s.photoThumb === "string")
-        .map((s) => ({
-          id: String(s.id || newStopId()),
-          name: s.name,
-          photoThumb: s.photoThumb,
-          ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
-          sections: Array.isArray(s.sections)
-            ? s.sections
-            : buildSectionsFromOcr(s.ocrText || ""),
-          updatedAt: s.updatedAt || new Date().toISOString(),
-        }));
+        .filter((s) => {
+          if (!s || typeof s.name !== "string") return false;
+          return Boolean(getStopPhotos(s).length || typeof s.photoThumb === "string");
+        })
+        .map((s) => {
+          const stop = {
+            id: String(s.id || newStopId()),
+            name: s.name,
+            photoThumb: typeof s.photoThumb === "string" ? s.photoThumb : "",
+            ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
+            sections: Array.isArray(s.sections) ? s.sections : [],
+            photos: Array.isArray(s.photos) ? s.photos : [],
+            updatedAt: s.updatedAt || new Date().toISOString(),
+          };
+          if (!stop.photos.length && stop.photoThumb) {
+            stop.sections = stop.sections.length
+              ? stop.sections
+              : buildSectionsFromOcr(stop.ocrText || "");
+          }
+          return normalizeStopPhotos(stop);
+        });
     }
   } catch {
     busStops = [];
@@ -716,14 +818,22 @@ function migrateLegacyBusStorage() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (typeof data.photoThumb !== "string") return;
-    busStops = [{
-      id: newStopId(),
-      name: "저장된 시간표",
-      photoThumb: data.photoThumb,
-      ocrText: "",
-      sections: [],
-      updatedAt: new Date().toISOString(),
-    }];
+    busStops = [
+      normalizeStopPhotos({
+        id: newStopId(),
+        name: "저장된 시간표",
+        photos: [
+          {
+            id: newStopId(),
+            photoThumb: data.photoThumb,
+            ocrText: "",
+            sections: [],
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      }),
+    ];
     saveBusState();
     localStorage.removeItem("bus-timetable-v1");
   } catch {
@@ -732,7 +842,7 @@ function migrateLegacyBusStorage() {
 
 function saveBusState() {
   try {
-    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 3, stops: busStops }));
     if (!window.__busCloudSyncApplying) {
       window.dispatchEvent(new CustomEvent("bus-local-state-saved"));
     }
@@ -833,13 +943,65 @@ async function handleBusPhoto(input) {
       ocrSource,
     };
 
-    if (pendingStopAction === "replace" && replaceStopId) {
+    if (pendingStopAction === "add-photo" && replaceStopId) {
       const stop = busStops.find((s) => s.id === replaceStopId);
-      openStopNameDialog(stop?.name || "");
-    } else {
-      pendingStopAction = pendingStopAction || "new";
-      openStopNameDialog("");
+      if (!stop) return;
+      if (getStopPhotos(stop).length >= maxPhotosPerStop()) {
+        setBusStatus(`한 정류장에는 사진 ${maxPhotosPerStop()}장까지 넣을 수 있습니다.`);
+        pendingStopDraft = null;
+        pendingStopAction = null;
+        replaceStopId = null;
+        return;
+      }
+      const photo = photoFromDraft(pendingStopDraft);
+      if (!Array.isArray(stop.photos)) stop.photos = getStopPhotos(stop);
+      stop.photos.push(photo);
+      stop.updatedAt = new Date().toISOString();
+      normalizeStopPhotos(stop);
+      activeStopId = stop.id;
+      activePhotoId = photo.id;
+      saveBusState();
+      renderStopDetail(stop.id);
+      renderStopList();
+      setBusStatus("시간표 사진을 추가했습니다.");
+      pendingStopDraft = null;
+      pendingStopAction = null;
+      replaceStopId = null;
+      return;
     }
+
+    if (
+      (pendingStopAction === "replace-photo" || pendingStopAction === "replace") &&
+      replaceStopId
+    ) {
+      const stop = busStops.find((s) => s.id === replaceStopId);
+      if (!stop) return;
+      const photos = getStopPhotos(stop);
+      if (!Array.isArray(stop.photos) || !stop.photos.length) {
+        stop.photos = [...photos];
+      }
+      const targetId = replacePhotoId || activePhotoId || photos[photos.length - 1]?.id;
+      const photo = photoFromDraft(pendingStopDraft);
+      const idx = stop.photos.findIndex((p) => p.id === targetId);
+      if (idx >= 0) stop.photos[idx] = photo;
+      else stop.photos.push(photo);
+      stop.updatedAt = new Date().toISOString();
+      normalizeStopPhotos(stop);
+      activeStopId = stop.id;
+      activePhotoId = photo.id;
+      saveBusState();
+      renderStopDetail(stop.id);
+      renderStopList();
+      setBusStatus("사진을 바꿨습니다.");
+      pendingStopDraft = null;
+      pendingStopAction = null;
+      replaceStopId = null;
+      replacePhotoId = null;
+      return;
+    }
+
+    pendingStopAction = pendingStopAction || "new";
+    openStopNameDialog("");
 
     setBusStatus(
       REGISTER_PHOTO_ONLY
@@ -856,6 +1018,7 @@ async function handleBusPhoto(input) {
     pendingStopDraft = null;
     pendingStopAction = null;
     replaceStopId = null;
+    replacePhotoId = null;
   } finally {
     if (input) input.value = "";
     photoPipelineBusy = false;
@@ -872,22 +1035,13 @@ function openStopNameDialog(currentName) {
 }
 
 function createStopFromDraft(draft, name) {
-  return {
+  const photo = photoFromDraft(draft);
+  return normalizeStopPhotos({
     id: newStopId(),
     name,
-    photoThumb: draft.photoThumb,
-    ocrText: draft.ocrText,
-    sections: draft.sections,
+    photos: [photo],
     updatedAt: new Date().toISOString(),
-  };
-}
-
-function applyDraftToStop(stop, draft, name) {
-  stop.name = name;
-  stop.photoThumb = draft.photoThumb;
-  stop.ocrText = draft.ocrText;
-  stop.sections = draft.sections;
-  stop.updatedAt = new Date().toISOString();
+  });
 }
 
 function getActiveStop() {
@@ -948,6 +1102,7 @@ function renderStopList() {
     btn.append(row);
     btn.addEventListener("click", () => {
       activeStopId = stop.id;
+      activePhotoId = null;
       renderStopDetail(stop.id);
     });
     li.append(btn);
@@ -1269,11 +1424,16 @@ function buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout) {
 }
 
 function getStopSections(stop) {
-  const built = stop.ocrText?.trim()
-    ? buildSectionsFromOcr(stop.ocrText)
-    : stop.sections?.length
-      ? stop.sections
-      : [];
+  const photo = getActivePhoto(stop);
+  const built = photo?.ocrText?.trim()
+    ? buildSectionsFromOcr(photo.ocrText)
+    : photo?.sections?.length
+      ? photo.sections
+      : stop.ocrText?.trim()
+        ? buildSectionsFromOcr(stop.ocrText)
+        : stop.sections?.length
+          ? stop.sections
+          : [];
   return stripPrivacyFromSections(normalizeSectionsForDisplay(built));
 }
 
@@ -1447,16 +1607,54 @@ function renderStopDetail(stopId) {
     return;
   }
 
+  const photos = getStopPhotos(stop);
+  if (!photos.length) {
+    showListView();
+    return;
+  }
+
+  if (!activePhotoId || !photos.some((p) => p.id === activePhotoId)) {
+    activePhotoId = photos[photos.length - 1].id;
+  }
+
   showDetailView();
   const title = document.querySelector("#detail-stop-name");
   const meta = document.querySelector("#detail-updated");
   const img = document.querySelector("#detail-photo");
+  const label = document.querySelector("#detail-photo-label");
+  const tabs = document.querySelector("#detail-photo-tabs");
+  const photo = getActivePhoto(stop);
+
   if (title) title.textContent = stop.name;
   if (meta) meta.textContent = `마지막 저장: ${formatStopDate(stop.updatedAt)}`;
-  if (img) {
-    img.src = stop.photoThumb;
-    img.alt = `${stop.name} 버스 시간표 원본 사진`;
+  if (label) {
+    label.textContent =
+      photos.length > 1 ? `시간표 사진 (${photos.length}장)` : "시간표 사진";
   }
+  if (img && photo) {
+    img.src = photo.photoThumb;
+    img.alt = `${stop.name} 버스 시간표 사진`;
+  }
+
+  if (tabs) {
+    tabs.replaceChildren();
+    photos.forEach((p, index) => {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "detail-photo-tab";
+      btn.textContent = `사진 ${index + 1}`;
+      if (p.id === activePhotoId) btn.classList.add("is-active");
+      btn.addEventListener("click", () => {
+        activePhotoId = p.id;
+        renderStopDetail(stopId);
+      });
+      li.append(btn);
+      tabs.append(li);
+    });
+    tabs.hidden = photos.length <= 1;
+  }
+
   setBusStatus("");
 }
 
@@ -2162,17 +2360,21 @@ async function refreshCacheList() {
 function normalizeBusStopsFromCloud(stops) {
   if (!Array.isArray(stops)) return [];
   return stops
-    .filter((s) => s && typeof s.name === "string" && typeof s.photoThumb === "string")
-    .map((s) => ({
-      id: String(s.id || newStopId()),
-      name: s.name,
-      photoThumb: s.photoThumb,
-      ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
-      sections: Array.isArray(s.sections)
-        ? s.sections
-        : buildSectionsFromOcr(s.ocrText || ""),
-      updatedAt: s.updatedAt || new Date().toISOString(),
-    }));
+    .filter((s) => {
+      if (!s || typeof s.name !== "string") return false;
+      return Boolean(getStopPhotos(s).length || typeof s.photoThumb === "string");
+    })
+    .map((s) =>
+      normalizeStopPhotos({
+        id: String(s.id || newStopId()),
+        name: s.name,
+        photoThumb: typeof s.photoThumb === "string" ? s.photoThumb : "",
+        ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
+        sections: Array.isArray(s.sections) ? s.sections : [],
+        photos: Array.isArray(s.photos) ? s.photos : [],
+        updatedAt: s.updatedAt || new Date().toISOString(),
+      })
+    );
 }
 
 window.busAppGetLocalStopState = function busAppGetLocalStopState() {
@@ -2189,7 +2391,7 @@ window.busAppApplyCloudStops = function busAppApplyCloudStops(stops) {
   busStops = normalizeBusStopsFromCloud(stops);
   window.__busCloudSyncApplying = true;
   try {
-    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 3, stops: busStops }));
   } catch (error) {
     console.error(error);
     setBusStatus(

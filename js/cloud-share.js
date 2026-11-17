@@ -218,6 +218,23 @@ function isInstalledPwa() {
   );
 }
 
+const ANDROID_NOTIFICATION_HELP =
+  "「내버스시간표」가 앱 알림 목록에 없어도 정상일 수 있습니다.\n" +
+  "PWA는 네이티브 앱이 아니라, 알림이 Chrome·브라우저 쪽으로 잡히는 경우가 많습니다.\n\n" +
+  "① 홈 화면에 추가한 아이콘으로 실행 (탭 말고)\n\n" +
+  "② 설정 → 앱 → Chrome(크롬) → 알림 → 켜기\n" +
+  "   (삼성 인터넷으로 설치했으면 「인터넷」 앱 알림)\n\n" +
+  "③ Chrome → ⋮ → 설정 → 사이트 설정 → 알림\n" +
+  "   → bus.uxpwa.com → 허용\n\n" +
+  "④ 삼성: 설정 → 배터리 → Chrome → 제한 없음\n\n" +
+  "⑤ 앱에서 「기기 알림 테스트」 → 상단/알림창에 뜨는지 확인\n\n" +
+  "플레이 스토어 설치형 앱처럼 목록에 꼭 뜨지는 않지만,\n" +
+  "위 설정이 맞으면 잠금·상단 알림은 될 수 있습니다.";
+
+export function showAndroidNotificationHelp() {
+  showBusShareHint(ANDROID_NOTIFICATION_HELP);
+}
+
 function describeNotificationEnvironment() {
   const sw = navigator.serviceWorker?.controller;
   const swUrl = sw?.scriptURL ? new URL(sw.scriptURL, location.href).pathname : "없음";
@@ -259,10 +276,8 @@ async function runLocalNotificationTest() {
   return (
     `${describeNotificationEnvironment()}\n\n` +
     "방금 「기기 알림 테스트」를 띄웠습니다.\n" +
-    "3초 안에 상단·알림창에 안 보이면:\n" +
-    "• 설정에서 **내버스시간표** 앱 알림(Chrome 아님) 확인\n" +
-    "• 홈 화면에 추가한 아이콘으로 다시 실행\n" +
-    "• 삼성: 설정 → 알림 → 앱 알림 → 내버스시간표"
+    "3초 안에 상단·알림창에 안 보이면 「삼성·알림 설정 안내」를 누르세요.\n" +
+    "(목록에 내버스시간표가 없어도 Chrome 알림을 켜면 됩니다.)"
   );
 }
 
@@ -915,6 +930,7 @@ export function initBusShareUi(client, session, setStatus) {
   const pushBtn = document.querySelector("#bus-share-push-enable");
   const pushTestBtn = document.querySelector("#bus-share-push-test");
   const pushLocalTestBtn = document.querySelector("#bus-share-push-local-test");
+  const pushHelpBtn = document.querySelector("#bus-share-push-help");
 
   if (!root || !session?.user) {
     if (root) root.hidden = true;
@@ -941,6 +957,10 @@ export function initBusShareUi(client, session, setStatus) {
             void syncPushEnableButton(pushBtn);
           });
       });
+    }
+
+    if (pushHelpBtn) {
+      pushHelpBtn.addEventListener("click", () => showAndroidNotificationHelp());
     }
 
     if (pushLocalTestBtn) {

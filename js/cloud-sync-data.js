@@ -136,6 +136,7 @@ async function hydrateRemoteStops(client, cloudStops) {
     photos.push({
       id: photoId,
       photoThumb,
+      label: typeof pr.label === "string" ? pr.label.trim() : "",
       ocrText: typeof pr.ocrText === "string" ? pr.ocrText : "",
       sections: Array.isArray(pr.sections) ? pr.sections : [],
       updatedAt: typeof pr.updatedAt === "string" ? pr.updatedAt : new Date().toISOString(),
@@ -340,6 +341,7 @@ export async function pushLocalStateToCloud(client, userId) {
       }
       cloudPhotos.push({
         id: photo.id,
+        label: typeof photo.label === "string" ? photo.label : "",
         ocrText: photo.ocrText || "",
         sections: photo.sections || [],
         updatedAt: photo.updatedAt || stop.updatedAt,

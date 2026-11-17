@@ -58,8 +58,10 @@ let activePhotoId = null;
 let replacePhotoId = null;
 /** @type {{ photoThumb: string, ocrText: string, sections: { title: string | null, lines: string[] }[] } | null} */
 let pendingStopDraft = null;
-/** @type {"new" | "replace" | "rename" | null} */
+/** @type {"new" | "replace" | "rename" | "add-photo" | "replace-photo" | "photo-label" | "rename-photo-label" | null} */
 let pendingStopAction = null;
+/** @type {string | null} */
+let pendingPhotoLabelEditId = null;
 /** @type {string | null} */
 let replaceStopId = null;
 /** 사진 처리 중 — 자동 업데이트 새로고침 방지 */
@@ -317,7 +319,7 @@ function bindBusUi() {
     const stop = getActiveStop();
     if (!stop) return;
     pendingStopAction = "rename";
-    openStopNameDialog(stop.name);
+    openNameDialog("stop-rename", { stopName: stop.name });
   });
 
   function beginAddPhoto(useCamera) {
@@ -368,7 +370,8 @@ function bindBusUi() {
       setBusStatus("정류장을 삭제했습니다.");
       return;
     }
-    if (!window.confirm("지금 보고 있는 사진만 삭제할까요?")) return;
+    const label = displayPhotoLabel(photo, photos.findIndex((p) => p.id === photo.id));
+    if (!window.confirm(`"${label}" 사진만 삭제할까요?`)) return;
     stop.photos = photos.filter((p) => p.id !== photo.id);
     stop.updatedAt = new Date().toISOString();
     normalizeStopPhotos(stop);
@@ -396,16 +399,19 @@ function bindBusUi() {
     pendingStopAction = null;
     replaceStopId = null;
     replacePhotoId = null;
+    pendingPhotoLabelEditId = null;
     nameDialog?.close();
   });
 
   nameForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#stop-name-input");
+    const photoLabelInput = document.querySelector("#photo-label-input");
     const name = input?.value?.trim();
-    if (!name) return;
+    const photoLabel = photoLabelInput?.value?.trim() || "";
 
     if (pendingStopAction === "rename") {
+      if (!name) return;
       const stop = getActiveStop();
       if (stop) {
         stop.name = name;
@@ -415,10 +421,46 @@ function bindBusUi() {
         renderStopList();
         setBusStatus("이름을 바꿨습니다.");
       }
+    } else if (pendingStopAction === "rename-photo-label" && pendingPhotoLabelEditId) {
+      if (!photoLabel) return;
+      const stop = getActiveStop();
+      if (stop) {
+        const photos = getStopPhotos(stop);
+        const hit = photos.find((p) => p.id === pendingPhotoLabelEditId);
+        if (hit) hit.label = photoLabel;
+        stop.photos = photos;
+        stop.updatedAt = new Date().toISOString();
+        normalizeStopPhotos(stop);
+        saveBusState();
+        renderStopDetail(stop.id);
+        renderStopList();
+        setBusStatus("사진 이름을 바꿨습니다.");
+      }
+    } else if (pendingStopAction === "photo-label" && pendingStopDraft && replaceStopId) {
+      if (!photoLabel) return;
+      const stop = busStops.find((s) => s.id === replaceStopId);
+      if (!stop) return;
+      if (getStopPhotos(stop).length >= maxPhotosPerStop()) {
+        setBusStatus(`한 정류장에는 사진 ${maxPhotosPerStop()}장까지 넣을 수 있습니다.`);
+      } else {
+        const photo = photoFromDraft(pendingStopDraft, photoLabel);
+        if (!Array.isArray(stop.photos)) stop.photos = getStopPhotos(stop);
+        stop.photos.push(photo);
+        stop.updatedAt = new Date().toISOString();
+        normalizeStopPhotos(stop);
+        activeStopId = stop.id;
+        activePhotoId = photo.id;
+        saveBusState();
+        renderStopDetail(stop.id);
+        renderStopList();
+        setBusStatus("시간표 사진을 추가했습니다.");
+      }
     } else if (pendingStopAction === "new" && pendingStopDraft) {
-      const stop = createStopFromDraft(pendingStopDraft, name);
+      if (!name) return;
+      const stop = createStopFromDraft(pendingStopDraft, name, photoLabel);
       busStops.unshift(stop);
       activeStopId = stop.id;
+      activePhotoId = getStopPhotos(stop).at(-1)?.id || null;
       saveBusState();
       renderStopDetail(stop.id);
       renderStopList();
@@ -429,6 +471,7 @@ function bindBusUi() {
     pendingStopAction = null;
     replaceStopId = null;
     replacePhotoId = null;
+    pendingPhotoLabelEditId = null;
     nameDialog?.close();
   });
 }
@@ -475,7 +518,6 @@ function bindPhotoViewer() {
   const btnFit = document.querySelector("#photo-viewer-fit");
   const btnZoomIn = document.querySelector("#photo-viewer-zoom-in");
   const btnZoomOut = document.querySelector("#photo-viewer-zoom-out");
-  const btnExpand = document.querySelector("#btn-expand-photo");
   if (!dialog || !stage || !pan || !img) return;
 
   const MAX_USER_ZOOM = 3;
@@ -592,12 +634,18 @@ function bindPhotoViewer() {
     });
   }
 
-  function openPhotoViewer() {
+  function openPhotoViewer(photoOverride) {
     const stop = getActiveStop();
-    const photo = getActivePhoto(stop);
-    if (!photo?.photoThumb) return;
-    titleEl.textContent = stop.name;
-    img.alt = `${stop.name} 버스 시간표 사진`;
+    const photo = photoOverride || getActivePhoto(stop);
+    if (!stop || !photo?.photoThumb) return;
+    const photos = getStopPhotos(stop);
+    const index = Math.max(
+      0,
+      photos.findIndex((p) => p.id === photo.id)
+    );
+    const label = displayPhotoLabel(photo, index);
+    titleEl.textContent = photos.length > 1 ? `${stop.name} · ${label}` : stop.name;
+    img.alt = `${stop.name} ${label} 시간표`;
     const src = photo.photoThumb;
     const onReady = () => {
       lockPageForPhotoViewer();
@@ -627,7 +675,8 @@ function bindPhotoViewer() {
   img.addEventListener("dragstart", blockNativeImageDrag);
   dialog.addEventListener("selectstart", blockNativeImageDrag);
 
-  btnExpand?.addEventListener("click", openPhotoViewer);
+  window.busAppOpenPhotoViewer = (photo) => openPhotoViewer(photo);
+
   btnClose?.addEventListener("click", closePhotoViewer);
   btnFit?.addEventListener("click", setZoomFit);
   btnZoomIn?.addEventListener("click", zoomInStep);
@@ -788,14 +837,95 @@ function getStopCoverThumb(stop) {
   return p?.photoThumb || (typeof stop.photoThumb === "string" ? stop.photoThumb : "");
 }
 
-function photoFromDraft(draft) {
+function photoFromDraft(draft, label) {
   return {
     id: newStopId(),
     photoThumb: draft.photoThumb,
+    label: typeof label === "string" ? label.trim() : "",
     ocrText: draft.ocrText || "",
     sections: Array.isArray(draft.sections) ? draft.sections : [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+function displayPhotoLabel(photo, index) {
+  if (window.BusStopPhotos?.displayPhotoLabel) {
+    return window.BusStopPhotos.displayPhotoLabel(photo, index);
+  }
+  const t = typeof photo?.label === "string" ? photo.label.trim() : "";
+  return t || `사진 ${index + 1}`;
+}
+
+/**
+ * @param {"stop-only" | "stop-and-photo" | "photo-only" | "stop-rename"} mode
+ */
+function openNameDialog(mode, values) {
+  const dialog = document.querySelector("#stop-name-dialog");
+  const title = document.querySelector("#stop-name-title");
+  const help = document.querySelector("#stop-name-dialog-help");
+  const stopWrap = document.querySelector("#stop-name-field-wrap");
+  const stopInput = document.querySelector("#stop-name-input");
+  const photoWrap = document.querySelector("#stop-photo-label-wrap");
+  const photoInput = document.querySelector("#photo-label-input");
+  const caption = document.querySelector("#stop-photo-label-caption");
+  if (!dialog || !stopInput || !photoInput) return;
+
+  const v = values || {};
+
+  if (mode === "photo-only") {
+    if (title) title.textContent = "사진 이름";
+    if (help) {
+      help.textContent = "버스 번호나 평일·주말처럼 기억하기 쉬운 이름을 적어 주세요.";
+    }
+    if (stopWrap) stopWrap.hidden = true;
+    if (photoWrap) photoWrap.hidden = false;
+    stopInput.removeAttribute("required");
+    photoInput.setAttribute("required", "");
+    if (caption) caption.textContent = "이 사진 이름 (버스 번호·애칭)";
+    stopInput.value = "";
+    photoInput.value = v.photoLabel || "";
+    photoInput.focus();
+  } else if (mode === "stop-rename") {
+    if (title) title.textContent = "정류장 이름";
+    if (help) {
+      help.textContent = "공식 이름이 아니어도 됩니다. 기억하기 쉬운 이름을 적어 주세요.";
+    }
+    if (stopWrap) stopWrap.hidden = false;
+    if (photoWrap) photoWrap.hidden = true;
+    stopInput.setAttribute("required", "");
+    photoInput.removeAttribute("required");
+    stopInput.value = v.stopName || "";
+    photoInput.value = "";
+    stopInput.focus();
+  } else if (mode === "stop-and-photo") {
+    if (title) title.textContent = "정류장·사진 이름";
+    if (help) {
+      help.textContent =
+        "정류장 이름과, 이 사진(버스 번호 등) 이름을 각각 적어 주세요.";
+    }
+    if (stopWrap) stopWrap.hidden = false;
+    if (photoWrap) photoWrap.hidden = false;
+    stopInput.setAttribute("required", "");
+    photoInput.setAttribute("required", "");
+    if (caption) caption.textContent = "첫 사진 이름 (버스 번호·애칭)";
+    stopInput.value = v.stopName || "";
+    photoInput.value = v.photoLabel || "";
+    stopInput.focus();
+  } else {
+    if (title) title.textContent = "정류장 이름";
+    if (help) {
+      help.textContent = "공식 이름이 아니어도 됩니다. 기억하기 쉬운 이름을 적어 주세요.";
+    }
+    if (stopWrap) stopWrap.hidden = false;
+    if (photoWrap) photoWrap.hidden = true;
+    stopInput.setAttribute("required", "");
+    photoInput.removeAttribute("required");
+    stopInput.value = v.stopName || "";
+    photoInput.value = "";
+    stopInput.focus();
+  }
+
+  dialog.showModal();
 }
 
 function loadBusState() {
@@ -980,20 +1110,9 @@ async function handleBusPhoto(input) {
         replaceStopId = null;
         return;
       }
-      const photo = photoFromDraft(pendingStopDraft);
-      if (!Array.isArray(stop.photos)) stop.photos = getStopPhotos(stop);
-      stop.photos.push(photo);
-      stop.updatedAt = new Date().toISOString();
-      normalizeStopPhotos(stop);
-      activeStopId = stop.id;
-      activePhotoId = photo.id;
-      saveBusState();
-      renderStopDetail(stop.id);
-      renderStopList();
-      setBusStatus("시간표 사진을 추가했습니다.");
-      pendingStopDraft = null;
-      pendingStopAction = null;
-      replaceStopId = null;
+      pendingStopAction = "photo-label";
+      openNameDialog("photo-only", { photoLabel: "" });
+      setBusStatus("이 사진 이름을 적어 주세요. (버스 번호·애칭)");
       return;
     }
 
@@ -1008,7 +1127,9 @@ async function handleBusPhoto(input) {
         stop.photos = [...photos];
       }
       const targetId = replacePhotoId || activePhotoId || photos[photos.length - 1]?.id;
-      const photo = photoFromDraft(pendingStopDraft);
+      const old = photos.find((p) => p.id === targetId);
+      const photo = photoFromDraft(pendingStopDraft, old?.label || "");
+      if (old) photo.id = old.id;
       const idx = stop.photos.findIndex((p) => p.id === targetId);
       if (idx >= 0) stop.photos[idx] = photo;
       else stop.photos.push(photo);
@@ -1028,12 +1149,12 @@ async function handleBusPhoto(input) {
     }
 
     pendingStopAction = pendingStopAction || "new";
-    openStopNameDialog("");
+    openNameDialog("stop-and-photo", { stopName: "", photoLabel: "" });
 
     setBusStatus(
       REGISTER_PHOTO_ONLY
-        ? "보정을 마쳤습니다. 정류장 이름을 적어 주세요."
-        : "정류장 이름을 적어 주세요."
+        ? "보정을 마쳤습니다. 정류장·사진 이름을 적어 주세요."
+        : "정류장·사진 이름을 적어 주세요."
     );
   } catch (error) {
     console.error(error);
@@ -1053,16 +1174,8 @@ async function handleBusPhoto(input) {
   }
 }
 
-function openStopNameDialog(currentName) {
-  const dialog = document.querySelector("#stop-name-dialog");
-  const input = document.querySelector("#stop-name-input");
-  if (input) input.value = currentName;
-  dialog?.showModal();
-  input?.focus();
-}
-
-function createStopFromDraft(draft, name) {
-  const photo = photoFromDraft(draft);
+function createStopFromDraft(draft, name, photoLabel) {
+  const photo = photoFromDraft(draft, photoLabel);
   return normalizeStopPhotos({
     id: newStopId(),
     name,
@@ -1647,42 +1760,73 @@ function renderStopDetail(stopId) {
   showDetailView();
   const title = document.querySelector("#detail-stop-name");
   const meta = document.querySelector("#detail-updated");
-  const img = document.querySelector("#detail-photo");
-  const label = document.querySelector("#detail-photo-label");
-  const tabs = document.querySelector("#detail-photo-tabs");
-  const photo = getActivePhoto(stop);
+  const list = document.querySelector("#detail-photo-list");
 
   if (title) title.textContent = stop.name;
-  if (meta) meta.textContent = `마지막 저장: ${formatStopDate(stop.updatedAt)}`;
-  if (label) {
-    label.textContent =
-      photos.length > 1 ? `시간표 사진 (${photos.length}장)` : "시간표 사진";
-  }
-  if (img && photo) {
-    img.src = photo.photoThumb;
-    img.alt = `${stop.name} 버스 시간표 사진`;
+  if (meta) {
+    const count = photos.length;
+    meta.textContent = `사진 ${count}장 · 마지막 저장: ${formatStopDate(stop.updatedAt)}`;
   }
 
-  if (tabs) {
-    tabs.replaceChildren();
+  if (list) {
+    list.replaceChildren();
     photos.forEach((p, index) => {
       const li = document.createElement("li");
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "detail-photo-tab";
-      btn.textContent = `사진 ${index + 1}`;
-      if (p.id === activePhotoId) btn.classList.add("is-active");
-      btn.addEventListener("click", () => {
+      li.className = "detail-photo-card panel-lite";
+      if (p.id === activePhotoId) li.classList.add("is-selected");
+
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "detail-photo-card-label";
+      nameBtn.textContent = displayPhotoLabel(p, index);
+      nameBtn.addEventListener("click", () => {
+        pendingStopAction = "rename-photo-label";
+        pendingPhotoLabelEditId = p.id;
+        openNameDialog("photo-only", { photoLabel: p.label || "" });
+      });
+
+      const hit = document.createElement("button");
+      hit.type = "button";
+      hit.className = "detail-photo-hit";
+      hit.setAttribute("aria-label", `${displayPhotoLabel(p, index)} 크게 보기`);
+      const img = document.createElement("img");
+      img.src = p.photoThumb;
+      img.alt = `${stop.name} ${displayPhotoLabel(p, index)}`;
+      img.loading = index < 2 ? "eager" : "lazy";
+      img.width = 960;
+      img.height = 720;
+      hit.append(img);
+      hit.addEventListener("click", () => {
+        if (typeof window.busAppOpenPhotoViewer === "function") {
+          window.busAppOpenPhotoViewer(p);
+        }
+      });
+
+      const selectBtn = document.createElement("button");
+      selectBtn.type = "button";
+      selectBtn.className = "detail-photo-card-select";
+      const selected = p.id === activePhotoId;
+      selectBtn.textContent = selected ? "선택됨 (다시 찍기·삭제)" : "이 사진 선택";
+      selectBtn.setAttribute("aria-pressed", selected ? "true" : "false");
+      selectBtn.addEventListener("click", () => {
         activePhotoId = p.id;
         renderStopDetail(stopId);
       });
-      li.append(btn);
-      tabs.append(li);
+
+      const hint = document.createElement("p");
+      hint.className = "detail-photo-card-hint";
+      hint.textContent = "사진 누르면 크게 · 이름 누르면 바꾸기";
+
+      li.append(nameBtn, hit, selectBtn, hint);
+      list.append(li);
     });
-    tabs.hidden = photos.length <= 1;
   }
 
-  setBusStatus("");
+  setBusStatus(
+    photos.length > 1
+      ? "다시 찍기·삭제할 사진은 「이 사진 선택」으로 고른 뒤 아래 버튼을 누르세요."
+      : ""
+  );
 }
 
 function formatStopDate(iso) {

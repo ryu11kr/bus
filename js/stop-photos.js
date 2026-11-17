@@ -13,6 +13,7 @@
         .map((p) => ({
           id: String(p.id || `ph-${Date.now()}`),
           photoThumb: String(p.photoThumb),
+          label: typeof p.label === "string" ? p.label.trim() : "",
           ocrText: typeof p.ocrText === "string" ? p.ocrText : "",
           sections: Array.isArray(p.sections) ? p.sections : [],
           updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : new Date().toISOString(),
@@ -23,6 +24,7 @@
         {
           id: `${stop.id}-legacy`,
           photoThumb: stop.photoThumb,
+          label: typeof stop.label === "string" ? stop.label.trim() : "",
           ocrText: typeof stop.ocrText === "string" ? stop.ocrText : "",
           sections: Array.isArray(stop.sections) ? stop.sections : [],
           updatedAt: typeof stop.updatedAt === "string" ? stop.updatedAt : new Date().toISOString(),
@@ -60,6 +62,7 @@
       const entry = {
         id,
         photoThumb: typeof raw.photoThumb === "string" ? raw.photoThumb : "",
+        label: typeof raw.label === "string" ? raw.label.trim() : "",
         ocrText: typeof raw.ocrText === "string" ? raw.ocrText : "",
         sections: Array.isArray(raw.sections) ? raw.sections : [],
         updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString(),
@@ -67,7 +70,12 @@
       };
       const prev = map.get(id);
       if (!prev || new Date(entry.updatedAt) >= new Date(prev.updatedAt)) {
-        map.set(id, { ...prev, ...entry, photoThumb: entry.photoThumb || prev?.photoThumb });
+        map.set(id, {
+          ...prev,
+          ...entry,
+          photoThumb: entry.photoThumb || prev?.photoThumb,
+          label: entry.label || prev?.label || "",
+        });
       }
     }
     return Array.from(map.values()).sort(
@@ -99,11 +107,22 @@
     return normalizeStopPhotos(stop);
   }
 
+  /**
+   * @param {{ label?: string } | null | undefined} photo
+   * @param {number} index
+   */
+  function displayPhotoLabel(photo, index) {
+    const t = typeof photo?.label === "string" ? photo.label.trim() : "";
+    if (t) return t;
+    return `사진 ${index + 1}`;
+  }
+
   window.BusStopPhotos = {
     MAX_PHOTOS_PER_STOP: MAX,
     getStopPhotos,
     normalizeStopPhotos,
     mergePhotoArrays,
     mergeStopRecord,
+    displayPhotoLabel,
   };
 })();

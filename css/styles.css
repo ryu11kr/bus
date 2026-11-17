@@ -767,6 +767,70 @@ footer {
   white-space: pre-line;
 }
 
+.bus-share-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.bus-share-busy[hidden] {
+  display: none !important;
+}
+
+.bus-share-busy-card {
+  max-width: 20rem;
+  padding: 1.35rem 1.5rem 1.25rem;
+  text-align: center;
+  background: #fff;
+  border: 3px solid #000;
+  border-radius: 1.25rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.bus-share-busy-text {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.bus-share-busy-spinner {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 1rem auto 0;
+  border: 4px solid #e8e8e8;
+  border-top-color: var(--brand, #f97316);
+  border-radius: 50%;
+  animation: bus-share-spin 0.75s linear infinite;
+}
+
+.bus-share-popup.is-busy .bus-share-popup-actions {
+  display: none;
+}
+
+.bus-share-popup.is-busy #bus-share-popup-body::after {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 1rem auto 0;
+  border: 4px solid #e8e8e8;
+  border-top-color: var(--brand, #f97316);
+  border-radius: 50%;
+  animation: bus-share-spin 0.75s linear infinite;
+}
+
+@keyframes bus-share-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .photo-guide-figure {
   margin: 0.75rem 0 0;
 }

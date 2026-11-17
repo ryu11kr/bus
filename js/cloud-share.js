@@ -117,6 +117,61 @@ function showBusShareHint(message) {
   okBtn.focus();
 }
 
+function yieldToPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+let shareAcceptBusyActive = false;
+
+function resetSharePopupBusyUi() {
+  const popup = document.querySelector("#bus-share-popup");
+  const actions = popup?.querySelector(".bus-share-popup-actions");
+  popup?.classList.remove("is-busy");
+  if (actions) actions.hidden = false;
+}
+
+/**
+ * @param {string} message
+ * @param {(text: string) => void} [setStatus]
+ */
+function showShareAcceptBusy(message, setStatus) {
+  shareAcceptBusyActive = true;
+  setStatus?.(message);
+  const popup = document.querySelector("#bus-share-popup");
+  const bodyEl = document.querySelector("#bus-share-popup-body");
+  if (popup?.open) {
+    popup.classList.add("is-busy");
+    const actions = popup.querySelector(".bus-share-popup-actions");
+    if (actions) actions.hidden = true;
+    if (bodyEl) bodyEl.textContent = message;
+    return;
+  }
+  const overlay = document.querySelector("#bus-share-busy");
+  const textEl = document.querySelector("#bus-share-busy-text");
+  if (overlay && textEl) {
+    textEl.textContent = message;
+    overlay.hidden = false;
+    overlay.setAttribute("aria-busy", "true");
+  }
+}
+
+/**
+ * @param {(text: string) => void} [setStatus]
+ */
+function hideShareAcceptBusy(setStatus) {
+  if (!shareAcceptBusyActive) return;
+  shareAcceptBusyActive = false;
+  const overlay = document.querySelector("#bus-share-busy");
+  if (overlay) {
+    overlay.hidden = true;
+    overlay.setAttribute("aria-busy", "false");
+  }
+  resetSharePopupBusyUi();
+  setStatus?.("");
+}
+
 /** 소문자만 맞춤. 받는 사람 Gmail은 로그인 주소와 글자 그대로 같아야 함 */
 function normalizeEmail(email) {
   let raw = String(email || "")
@@ -248,26 +303,32 @@ function markPopupDismissed(requestId) {
  * @param {string} requestId
  */
 async function acceptShareRequest(client, userEmail, listEl, setStatus, requestId) {
-  setStatus?.("정류장을 가져오는 중…");
+  showShareAcceptBusy("공유를 수락하는 중…", setStatus);
+  await yieldToPaint();
   try {
-    await authFetch("share-accept", {
-      method: "POST",
-      body: JSON.stringify({ requestId }),
-    });
-  } catch (accErr) {
-    if (accErr.code === "server_not_configured") {
-      throw Object.assign(new Error("server_not_configured"), accErr);
+    try {
+      await authFetch("share-accept", {
+        method: "POST",
+        body: JSON.stringify({ requestId }),
+      });
+    } catch (accErr) {
+      if (accErr.code === "server_not_configured") {
+        throw Object.assign(new Error("server_not_configured"), accErr);
+      }
+      throw accErr;
     }
-    throw accErr;
+    showShareAcceptBusy("정류장을 가져오는 중…", setStatus);
+    await yieldToPaint();
+    const userId = (await client.auth.getSession()).data.session?.user?.id;
+    if (userId) {
+      await runFullCloudSync(client, userId);
+    }
+    markPopupDismissed(requestId);
+    showBusShareHint("공유받은 정류장을 내 목록에 반영했습니다.");
+    await refreshIncomingShareRequests(client, userEmail, listEl, setStatus, requestId);
+  } finally {
+    hideShareAcceptBusy(setStatus);
   }
-  const userId = (await client.auth.getSession()).data.session?.user?.id;
-  if (userId) {
-    await runFullCloudSync(client, userId);
-  }
-  markPopupDismissed(requestId);
-  setStatus?.("");
-  showBusShareHint("공유받은 정류장을 내 목록에 반영했습니다.");
-  await refreshIncomingShareRequests(client, userEmail, listEl, setStatus, requestId);
 }
 
 /**
@@ -322,6 +383,7 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   if (dialog.open && popupCurrentRequest?.id === row.id) return;
 
   popupCurrentRequest = { id: String(row.id), from_email: row.from_email };
+  resetSharePopupBusyUi();
   bodyEl.textContent = `${row.from_email} 님이 버스 정류장 정보를 공유했습니다.`;
   bindSharePopupOnce(client, userEmail, listEl, setStatus);
   bindBusShareModalScrollLock();

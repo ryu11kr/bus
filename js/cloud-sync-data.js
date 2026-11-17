@@ -306,7 +306,7 @@ export async function pushLocalStateToCloud(client, userId) {
       schema_version: 3,
       updated_at: stateUpdatedAt,
     });
-    setSyncStatus("클라우드와 맞춤 (저장된 정류장 없음)");
+    setSyncStatus("시간표를 안전하게 보관중입니다.");
     return;
   }
 
@@ -390,7 +390,7 @@ export async function runFullCloudSync(client, userId) {
     setSyncStatus("클라우드에서 불러오는 중…");
     try {
       await pullAndMergeCloudState(client, userId);
-      setSyncStatus("클라우드와 맞췄습니다.");
+      setSyncStatus("시간표를 안전하게 보관중입니다.");
     } catch (error) {
       console.error(error);
       setSyncStatus(

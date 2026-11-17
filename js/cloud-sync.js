@@ -233,6 +233,7 @@ async function initGoogleAuthUi(client, cfg) {
   const syncEl = document.querySelector("#cloud-sync-sync-status");
   const loginBtn = document.querySelector("#cloud-sync-google-login");
   const logoutBtn = document.querySelector("#cloud-sync-logout");
+  const introEl = document.querySelector("#cloud-sync-teaser-intro");
   if (!authRoot || !statusEl || !loginBtn || !logoutBtn) return;
 
   if (!cfg.showGoogleLogin || !cloudSyncRuntime?.configured) {
@@ -262,6 +263,7 @@ async function initGoogleAuthUi(client, cfg) {
     loginBtn.hidden = signedIn;
     logoutBtn.hidden = !signedIn;
     loginBtn.disabled = false;
+    if (introEl) introEl.hidden = signedIn;
     if (signedIn) {
       statusEl.textContent = formatSignedInLabel(session.user);
       if (cfg.enabled) {
@@ -271,6 +273,7 @@ async function initGoogleAuthUi(client, cfg) {
       }
       if (ticket !== renderSerial) return;
     } else {
+      if (introEl) introEl.hidden = false;
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled
         ? "아래 구글로 로그인해 두면, 휴대폰을 바꿔도 시간표를 다시 불러올 수 있습니다."

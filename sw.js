@@ -10,6 +10,8 @@ const APP_SHELL = [
   "./offline.html",
   "./css/styles.css",
   "./js/app.js",
+  "./js/cloud-sync.js",
+  "./cloud-sync.config.json",
   "./version.json",
   "./manifest.webmanifest",
   "./pwa.config.json",

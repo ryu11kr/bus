@@ -568,6 +568,17 @@ footer {
   margin-top: 0.45rem;
 }
 
+.cloud-sync-teaser {
+  margin-top: 0.85rem;
+}
+
+.cloud-sync-teaser-msg {
+  margin: 0.65rem 0 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 .photo-guide-figure {
   margin: 0.75rem 0 0;
 }

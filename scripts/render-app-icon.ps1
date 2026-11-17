@@ -1,14 +1,28 @@
-﻿# Renders bold PWA icons (192 / 512 / maskable) — saturated bg + simple white glyph.
+﻿# Renders bold PWA icons (192 / 512 / maskable) — orange bg, large clock + front bus.
 param(
   [string]$OutDir = (Join-Path $PSScriptRoot "..\icons")
 )
 
 Add-Type -AssemblyName System.Drawing
 
+function Add-RoundedRectPath {
+  param(
+    [System.Drawing.Drawing2D.GraphicsPath]$Path,
+    [System.Drawing.Rectangle]$R,
+    [int]$Radius
+  )
+  $rad = [Math]::Min($Radius, [Math]::Min($R.Width, $R.Height) / 2)
+  $Path.AddArc($R.X, $R.Y, $rad * 2, $rad * 2, 180, 90)
+  $Path.AddArc($R.Right - $rad * 2, $R.Y, $rad * 2, $rad * 2, 270, 90)
+  $Path.AddArc($R.Right - $rad * 2, $R.Bottom - $rad * 2, $rad * 2, $rad * 2, 0, 90)
+  $Path.AddArc($R.X, $R.Bottom - $rad * 2, $rad * 2, $rad * 2, 90, 90)
+  $Path.CloseFigure()
+}
+
 function New-BusClockIcon {
   param(
     [int]$Size,
-    [double]$PadRatio = 0.12,
+    [double]$PadRatio = 0.1,
     [string]$BgHex = "#F97316"
   )
 
@@ -25,66 +39,88 @@ function New-BusClockIcon {
   $inner = $Size - 2 * $pad
   $white = [System.Drawing.Color]::White
   $whiteBrush = New-Object System.Drawing.SolidBrush $white
-  $whitePen = New-Object System.Drawing.Pen($white, ([Math]::Max(2, [int]($Size / 96))))
+  $bgBrush = New-Object System.Drawing.SolidBrush $bg
 
-  # 시계 원 (상단)
-  $clockD = [int]($inner * 0.52)
+  # —— 시계 (크게, 상단 중앙) ——
+  $clockD = [int]($inner * 0.62)
   $cx = $pad + [int]($inner * 0.5)
-  $cy = $pad + [int]($inner * 0.33)
+  $cy = $pad + [int]($inner * 0.36)
   $half = [int]($clockD / 2)
   $g.FillEllipse($whiteBrush, $cx - $half, $cy - $half, $clockD, $clockD)
-  $ringPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(3, [int]($Size / 64))))
-  $g.DrawEllipse($ringPen, $cx - $half + 2, $cy - $half + 2, $clockD - 4, $clockD - 4)
 
-  $handPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(4, [int]($Size / 42))))
-  $handPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $handPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $hl = $clockD * 0.22
-  $ml = $clockD * 0.32
-  $g.DrawLine($handPen, $cx, $cy, $cx + $hl * 0.5, $cy - $hl)
-  $g.DrawLine($handPen, $cx, $cy, $cx + $ml * 0.85, $cy + $ml * 0.35)
+  $ringW = [Math]::Max(4, [int]($Size / 56))
+  $ringPen = New-Object System.Drawing.Pen($bg, $ringW)
+  $g.DrawEllipse($ringPen, $cx - $half + $ringW, $cy - $half + $ringW, $clockD - $ringW * 2, $clockD - $ringW * 2)
 
-  # 버스 실루엣 (하단, 흰색 둥근 사각형)
-  $busW = [int]($inner * 0.82)
-  $busH = [int]($inner * 0.38)
-  $bx = $pad + [int](($inner - $busW) / 2)
-  $by = $pad + [int]($inner * 0.48)
-  $radius = [Math]::Max(8, [int]($Size / 28))
-
-  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $r = New-Object System.Drawing.Rectangle $bx, $by, $busW, $busH
-  $path.AddArc($r.X, $r.Y, $radius * 2, $radius * 2, 180, 90)
-  $path.AddArc($r.Right - $radius * 2, $r.Y, $radius * 2, $radius * 2, 270, 90)
-  $path.AddArc($r.Right - $radius * 2, $r.Bottom - $radius * 2, $radius * 2, $radius * 2, 0, 90)
-  $path.AddArc($r.X, $r.Bottom - $radius * 2, $radius * 2, $radius * 2, 90, 90)
-  $path.CloseFigure()
-  $g.FillPath($whiteBrush, $path)
-
-  # 창문 (배경색으로 파내기)
-  $winW = [int]($busW * 0.28)
-  $winH = [int]($busH * 0.36)
-  $winY = $by + [int]($busH * 0.2)
-  $gap = [int]($busW * 0.1)
-  $wx1 = $bx + [int]($busW * 0.14)
-  $wx2 = $wx1 + $winW + $gap
-  $winBrush = New-Object System.Drawing.SolidBrush $bg
-  $winR = [Math]::Max(4, [int]($Size / 64))
-  foreach ($wx in @($wx1, $wx2)) {
-    $wp = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $wr = New-Object System.Drawing.Rectangle $wx, $winY, $winW, $winH
-    $wp.AddArc($wr.X, $wr.Y, $winR * 2, $winR * 2, 180, 90)
-    $wp.AddArc($wr.Right - $winR * 2, $wr.Y, $winR * 2, $winR * 2, 270, 90)
-    $wp.AddArc($wr.Right - $winR * 2, $wr.Bottom - $winR * 2, $winR * 2, $winR * 2, 0, 90)
-    $wp.AddArc($wr.X, $wr.Bottom - $winR * 2, $winR * 2, $winR * 2, 90, 90)
-    $wp.CloseFigure()
-    $g.FillPath($winBrush, $wp)
+  $tickPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(2, [int]($Size / 128))))
+  $tickPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $tickPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $tickR = $half - [int]($Size / 40)
+  for ($i = 0; $i -lt 12; $i++) {
+    $ang = ($i * 30 - 90) * [Math]::PI / 180
+    $x1 = $cx + [int]([Math]::Cos($ang) * ($tickR - [int]($Size / 80)))
+    $y1 = $cy + [int]([Math]::Sin($ang) * ($tickR - [int]($Size / 80)))
+    $x2 = $cx + [int]([Math]::Cos($ang) * $tickR)
+    $y2 = $cy + [int]([Math]::Sin($ang) * $tickR)
+    $g.DrawLine($tickPen, $x1, $y1, $x2, $y2)
   }
 
-  # 바퀴
-  $wheelR = [Math]::Max(5, [int]($Size / 40))
-  $wheelBrush = New-Object System.Drawing.SolidBrush $bg
-  $g.FillEllipse($wheelBrush, $bx + [int]($busW * 0.2) - $wheelR, $by + $busH - [int]($wheelR * 0.6), $wheelR * 2, $wheelR * 2)
-  $g.FillEllipse($wheelBrush, $bx + [int]($busW * 0.72) - $wheelR, $by + $busH - [int]($wheelR * 0.6), $wheelR * 2, $wheelR * 2)
+  $handPen = New-Object System.Drawing.Pen($bg, ([Math]::Max(5, [int]($Size / 36))))
+  $handPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $handPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $hl = $clockD * 0.26
+  $ml = $clockD * 0.36
+  $g.DrawLine($handPen, $cx, $cy, $cx + $hl * 0.55, $cy - $hl)
+  $g.DrawLine($handPen, $cx, $cy, $cx + $ml * 0.9, $cy + $ml * 0.38)
+  $g.FillEllipse($bgBrush, $cx - [int]($Size / 42), $cy - [int]($Size / 42), [int]($Size / 21), [int]($Size / 21))
+
+  # —— 버스 정면 (하단, 큼직하게) ——
+  $busW = [int]($inner * 0.78)
+  $busH = [int]($inner * 0.42)
+  $bx = $pad + [int](($inner - $busW) / 2)
+  $by = $pad + [int]($inner * 0.54)
+  $busRad = [Math]::Max(10, [int]($Size / 22))
+
+  $bodyPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $bodyR = New-Object System.Drawing.Rectangle $bx, $by, $busW, $busH
+  Add-RoundedRectPath -Path $bodyPath -R $bodyR -Radius $busRad
+  $g.FillPath($whiteBrush, $bodyPath)
+
+  # 앞 유리 (주황으로 파냄)
+  $glassW = [int]($busW * 0.72)
+  $glassH = [int]($busH * 0.42)
+  $gx = $bx + [int](($busW - $glassW) / 2)
+  $gy = $by + [int]($busH * 0.12)
+  $glassRad = [Math]::Max(6, [int]($Size / 48))
+  $glassPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $glassR = New-Object System.Drawing.Rectangle $gx, $gy, $glassW, $glassH
+  Add-RoundedRectPath -Path $glassPath -R $glassR -Radius $glassRad
+  $g.FillPath($bgBrush, $glassPath)
+
+  # 헤드라이트
+  $lightR = [Math]::Max(6, [int]($Size / 34))
+  $ly = $by + [int]($busH * 0.62)
+  $lxL = $bx + [int]($busW * 0.16)
+  $lxR = $bx + $busW - [int]($busW * 0.16) - $lightR * 2
+  $g.FillEllipse($whiteBrush, $lxL, $ly, $lightR * 2, $lightR * 2)
+  $g.FillEllipse($whiteBrush, $lxR, $ly, $lightR * 2, $lightR * 2)
+  $g.FillEllipse($bgBrush, $lxL + [int]($lightR * 0.35), $ly + [int]($lightR * 0.35), [int]($lightR * 1.3), [int]($lightR * 1.3))
+  $g.FillEllipse($bgBrush, $lxR + [int]($lightR * 0.35), $ly + [int]($lightR * 0.35), [int]($lightR * 1.3), [int]($lightR * 1.3))
+
+  # 범퍼
+  $bumperH = [Math]::Max(4, [int]($Size / 48))
+  $bumperPen = New-Object System.Drawing.Pen($bg, $bumperH)
+  $bumperPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $bumperPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $bumY = $by + $busH - [int]($busH * 0.14)
+  $g.DrawLine($bumperPen, $bx + [int]($busW * 0.12), $bumY, $bx + $busW - [int]($busW * 0.12), $bumY)
+
+  # 사이드 미러 (작게)
+  $mirW = [int]($busW * 0.1)
+  $mirH = [Math]::Max(4, [int]($Size / 64))
+  $mirY = $by + [int]($busH * 0.28)
+  $g.FillRectangle($whiteBrush, $bx - [int]($mirW * 0.7), $mirY, $mirW, $mirH)
+  $g.FillRectangle($whiteBrush, $bx + $busW - [int]($mirW * 0.3), $mirY, $mirW, $mirH)
 
   $g.Dispose()
   return $bmp

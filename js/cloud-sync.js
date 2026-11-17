@@ -1,15 +1,23 @@
-/** 클라우드 동기화 — 스텝 3: 구글 로그인( Supabase Auth ), 데이터 동기화는 미연동 */
+/** 클라우드 동기화 — 스텝 4: 로그인 + enabled 시 정류장 클라우드 저장·불러오기 */
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
+import {
+  bindCloudSaveListener,
+  runFullCloudSync,
+  setCloudSyncStatusCallback,
+} from "./cloud-sync-data.js";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
-  enabled: false,
+  enabled: true,
   showTeaser: true,
   showGoogleLogin: true,
   teaserTitle: "다른 폰에서도 보기",
   teaserMessage:
-    "구글 계정으로 로그인해 두면, 나중에 다른 폰에서도 시간표를 불러올 수 있게 준비 중입니다. 지금 저장되는 데이터는 이 기기에만 있습니다.",
+    "구글로 로그인하면 정류장·시간표 사진을 안전하게 보관하고, 다른 폰·PC에서도 불러올 수 있습니다. 로그인하지 않으면 이 기기에만 저장됩니다.",
 };
+
+/** @type {typeof DEFAULT_CLOUD_SYNC_CONFIG | null} */
+let cloudSyncCfg = null;
 
 /**
  * @returns {Promise<typeof DEFAULT_CLOUD_SYNC_CONFIG>}
@@ -47,6 +55,8 @@ let cloudSyncRuntime = null;
 /** @type {import("@supabase/supabase-js").SupabaseClient | null} */
 let supabaseClient = null;
 
+let cloudSaveListenerBound = false;
+
 /**
  * @returns {Promise<CloudSyncRuntime | null>}
  */
@@ -67,13 +77,6 @@ async function loadCloudSyncRuntime() {
   } catch {
     return null;
   }
-}
-
-/**
- * @returns {import("@supabase/supabase-js").SupabaseClient | null}
- */
-function getSupabaseClient() {
-  return supabaseClient;
 }
 
 window.getCloudSyncRuntime = () => cloudSyncRuntime;
@@ -98,12 +101,27 @@ function formatSignedInLabel(user) {
 }
 
 /**
+ * @param {import("@supabase/supabase-js").Session | null} session
+ * @param {typeof DEFAULT_CLOUD_SYNC_CONFIG} cfg
+ */
+async function handleSessionCloudSync(session, cfg) {
+  if (!cfg.enabled || !supabaseClient || !session?.user?.id) return;
+  const userId = session.user.id;
+  if (!cloudSaveListenerBound) {
+    bindCloudSaveListener(supabaseClient, userId, cfg.enabled);
+    cloudSaveListenerBound = true;
+  }
+  await runFullCloudSync(supabaseClient, userId);
+}
+
+/**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {typeof DEFAULT_CLOUD_SYNC_CONFIG} cfg
  */
 async function initGoogleAuthUi(client, cfg) {
   const authRoot = document.querySelector("#cloud-sync-auth");
   const statusEl = document.querySelector("#cloud-sync-auth-status");
+  const syncEl = document.querySelector("#cloud-sync-sync-status");
   const loginBtn = document.querySelector("#cloud-sync-google-login");
   const logoutBtn = document.querySelector("#cloud-sync-logout");
   if (!authRoot || !statusEl || !loginBtn || !logoutBtn) return;
@@ -115,16 +133,38 @@ async function initGoogleAuthUi(client, cfg) {
 
   authRoot.hidden = false;
 
+  setCloudSyncStatusCallback((text) => {
+    if (!syncEl) return;
+    if (!text) {
+      syncEl.hidden = true;
+      syncEl.textContent = "";
+      return;
+    }
+    syncEl.hidden = false;
+    syncEl.textContent = text;
+  });
+
   /** @param {import("@supabase/supabase-js").Session | null} session */
-  function renderSession(session) {
+  async function renderSession(session) {
     const signedIn = Boolean(session?.user);
     loginBtn.hidden = signedIn;
     logoutBtn.hidden = !signedIn;
     if (signedIn) {
       statusEl.textContent = formatSignedInLabel(session.user);
+      if (cfg.enabled) {
+        await handleSessionCloudSync(session, cfg);
+      } else if (syncEl) {
+        syncEl.hidden = true;
+      }
     } else {
-      statusEl.textContent =
-        "로그인해 두면 나중에 다른 폰·PC에서 같은 시간표를 쓸 준비가 됩니다. (아직 옮기기는 다음 단계)";
+      cloudSaveListenerBound = false;
+      statusEl.textContent = cfg.enabled
+        ? "로그인하면 다른 폰에서도 같은 시간표를 쓸 수 있습니다."
+        : "로그인해 두면 나중에 다른 폰·PC에서 같은 시간표를 쓸 준비가 됩니다.";
+      if (syncEl) {
+        syncEl.hidden = true;
+        syncEl.textContent = "";
+      }
     }
   }
 
@@ -149,7 +189,8 @@ async function initGoogleAuthUi(client, cfg) {
     logoutBtn.disabled = true;
     try {
       await client.auth.signOut();
-      renderSession(null);
+      cloudSaveListenerBound = false;
+      await renderSession(null);
     } catch (error) {
       console.error(error);
       statusEl.textContent = "로그아웃하지 못했습니다. 다시 시도해 주세요.";
@@ -162,14 +203,14 @@ async function initGoogleAuthUi(client, cfg) {
   try {
     const { data, error } = await client.auth.getSession();
     if (error) throw error;
-    renderSession(data.session);
+    await renderSession(data.session);
   } catch (error) {
     console.error(error);
     statusEl.textContent = "로그인을 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
   }
 
   client.auth.onAuthStateChange((_event, session) => {
-    renderSession(session);
+    renderSession(session).catch(() => {});
   });
 }
 
@@ -179,10 +220,10 @@ async function initCloudSyncShell() {
   const root = document.querySelector("#cloud-sync-teaser");
   if (!root) return;
 
-  const cfg = await loadCloudSyncConfig();
+  cloudSyncCfg = await loadCloudSyncConfig();
   cloudSyncRuntime = await loadCloudSyncRuntime();
 
-  if (!cfg.showTeaser) {
+  if (!cloudSyncCfg.showTeaser) {
     root.hidden = true;
     return;
   }
@@ -190,13 +231,13 @@ async function initCloudSyncShell() {
   root.hidden = false;
   const summary = root.querySelector("summary");
   const message = root.querySelector(".cloud-sync-teaser-msg");
-  if (summary) summary.textContent = cfg.teaserTitle;
-  if (message) message.textContent = cfg.teaserMessage;
+  if (summary) summary.textContent = cloudSyncCfg.teaserTitle;
+  if (message) message.textContent = cloudSyncCfg.teaserMessage;
 
-  root.dataset.cloudSyncEnabled = cfg.enabled ? "true" : "false";
+  root.dataset.cloudSyncEnabled = cloudSyncCfg.enabled ? "true" : "false";
   root.dataset.cloudSyncConfigured = cloudSyncRuntime?.configured ? "true" : "false";
 
-  if (cloudSyncRuntime?.configured && cfg.showGoogleLogin) {
+  if (cloudSyncRuntime?.configured && cloudSyncCfg.showGoogleLogin) {
     supabaseClient = createClient(cloudSyncRuntime.supabaseUrl, cloudSyncRuntime.supabaseAnonKey, {
       auth: {
         persistSession: true,
@@ -204,7 +245,7 @@ async function initCloudSyncShell() {
         flowType: "pkce",
       },
     });
-    await initGoogleAuthUi(supabaseClient, cfg);
+    await initGoogleAuthUi(supabaseClient, cloudSyncCfg);
   }
 }
 

@@ -733,6 +733,9 @@ function migrateLegacyBusStorage() {
 function saveBusState() {
   try {
     localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+    if (!window.__busCloudSyncApplying) {
+      window.dispatchEvent(new CustomEvent("bus-local-state-saved"));
+    }
     return true;
   } catch (error) {
     console.error(error);
@@ -2155,3 +2158,55 @@ async function refreshCacheList() {
     cacheList.append(li);
   }
 }
+
+function normalizeBusStopsFromCloud(stops) {
+  if (!Array.isArray(stops)) return [];
+  return stops
+    .filter((s) => s && typeof s.name === "string" && typeof s.photoThumb === "string")
+    .map((s) => ({
+      id: String(s.id || newStopId()),
+      name: s.name,
+      photoThumb: s.photoThumb,
+      ocrText: typeof s.ocrText === "string" ? s.ocrText : "",
+      sections: Array.isArray(s.sections)
+        ? s.sections
+        : buildSectionsFromOcr(s.ocrText || ""),
+      updatedAt: s.updatedAt || new Date().toISOString(),
+    }));
+}
+
+window.busAppGetLocalStopState = function busAppGetLocalStopState() {
+  try {
+    const raw = localStorage.getItem(BUS_STORAGE_KEY);
+    if (!raw) return { version: 2, stops: [] };
+    return JSON.parse(raw);
+  } catch {
+    return { version: 2, stops: [] };
+  }
+};
+
+window.busAppApplyCloudStops = function busAppApplyCloudStops(stops) {
+  busStops = normalizeBusStopsFromCloud(stops);
+  window.__busCloudSyncApplying = true;
+  try {
+    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 2, stops: busStops }));
+  } catch (error) {
+    console.error(error);
+    setBusStatus(
+      "저장 공간이 부족합니다. 정류장을 줄이거나 브라우저 데이터를 비운 뒤 다시 시도해 주세요."
+    );
+    return false;
+  } finally {
+    window.__busCloudSyncApplying = false;
+  }
+  renderStopList();
+  if (activeStopId) {
+    const still = busStops.find((s) => s.id === activeStopId);
+    if (still) renderStopDetail(activeStopId);
+    else {
+      activeStopId = null;
+      showListView();
+    }
+  }
+  return true;
+};

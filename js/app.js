@@ -506,7 +506,8 @@ function bindPhotoViewer() {
   const stage = document.querySelector("#photo-viewer-stage");
   const pan = document.querySelector("#photo-viewer-pan");
   const img = document.querySelector("#photo-viewer-img");
-  const titleEl = document.querySelector("#photo-viewer-title");
+  const stopNameEl = document.querySelector("#photo-viewer-stop-name");
+  const photoLabelEl = document.querySelector("#photo-viewer-photo-label");
   const btnClose = document.querySelector("#photo-viewer-close");
   const btnFit = document.querySelector("#photo-viewer-fit");
   const btnZoomIn = document.querySelector("#photo-viewer-zoom-in");
@@ -637,7 +638,16 @@ function bindPhotoViewer() {
       photos.findIndex((p) => p.id === photo.id)
     );
     const label = displayPhotoLabel(photo, index);
-    titleEl.textContent = photos.length > 1 ? `${stop.name} · ${label}` : stop.name;
+    if (stopNameEl) stopNameEl.textContent = stop.name;
+    if (photoLabelEl) {
+      if (photos.length > 1) {
+        photoLabelEl.textContent = label;
+        photoLabelEl.hidden = false;
+      } else {
+        photoLabelEl.textContent = "";
+        photoLabelEl.hidden = true;
+      }
+    }
     img.alt = `${stop.name} ${label} 시간표`;
     const src = photo.photoThumb;
     const onReady = () => {
@@ -1783,7 +1793,7 @@ function renderStopDetail(stopId) {
       nameBtn.className = "detail-photo-label-btn";
       const kicker = document.createElement("span");
       kicker.className = "detail-photo-label-btn-kicker";
-      kicker.textContent = "사진 이름 (눌러서 입력)";
+      kicker.textContent = "시간표 이름 (눌러서 입력)";
       const value = document.createElement("span");
       value.className = "detail-photo-label-btn-value";
       const hasLabel = photoHasCustomLabel(p);

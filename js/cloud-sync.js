@@ -11,9 +11,9 @@ const DEFAULT_CLOUD_SYNC_CONFIG = {
   enabled: true,
   showTeaser: true,
   showGoogleLogin: true,
-  teaserTitle: "다른 폰에서도 보기",
+  teaserTitle: "시간표 안전하게 보관",
   teaserMessage:
-    "구글로 로그인하면 정류장·시간표 사진을 안전하게 보관하고, 다른 폰·PC에서도 불러올 수 있습니다. 로그인하지 않으면 이 기기에만 저장됩니다.",
+    "구글로 로그인하면 정류장·시간표 사진을 안전하게 보관하고, 다른 휴대폰·컴퓨터에서도 같은 시간표를 볼 수 있습니다. 로그인하지 않으면 이 기기에만 저장됩니다.",
 };
 
 /** @type {typeof DEFAULT_CLOUD_SYNC_CONFIG | null} */
@@ -159,8 +159,8 @@ async function initGoogleAuthUi(client, cfg) {
     } else {
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled
-        ? "로그인하면 다른 폰에서도 같은 시간표를 쓸 수 있습니다."
-        : "로그인해 두면 나중에 다른 폰·PC에서 같은 시간표를 쓸 준비가 됩니다.";
+        ? "아래 구글로 로그인하면 다른 기기에서도 같은 시간표를 쓸 수 있습니다."
+        : "아래 구글로 로그인해 시간표를 안전하게 보관할 수 있습니다.";
       if (syncEl) {
         syncEl.hidden = true;
         syncEl.textContent = "";

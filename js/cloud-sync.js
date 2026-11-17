@@ -6,7 +6,11 @@ import {
   runFullCloudSync,
   setCloudSyncStatusCallback,
 } from "./cloud-sync-data.js";
-import { initBusShareUi, refreshIncomingShareRequests } from "./cloud-share.js";
+import {
+  initBusShareUi,
+  refreshIncomingShareRequests,
+  syncPushEnableButton,
+} from "./cloud-share.js";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
   enabled: true,
@@ -302,6 +306,7 @@ async function initGoogleAuthUi(client, cfg) {
         syncEl.textContent = text;
       };
       initBusShareUi(client, session, setShareStatus);
+      void syncPushEnableButton(document.querySelector("#bus-share-push-enable"));
       void refreshIncomingShareRequests(
         client,
         session.user.email || "",

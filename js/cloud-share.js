@@ -4,6 +4,8 @@ import { pushLocalStateToCloud, runFullCloudSync } from "./cloud-sync-data.js";
 
 let shareUiBound = false;
 
+const PUSH_OK_STORAGE = "bus-share-push-enabled";
+
 function normalizeEmail(email) {
   let raw = String(email || "")
     .trim()
@@ -18,6 +20,49 @@ function normalizeEmail(email) {
 function isAndroidPushCapable() {
   if (!/android/i.test(navigator.userAgent)) return false;
   return "PushManager" in window && "Notification" in window && "serviceWorker" in navigator;
+}
+
+async function hasActivePushSubscription() {
+  if (!isAndroidPushCapable() || Notification.permission !== "granted") return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return Boolean(sub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {HTMLButtonElement | null} pushBtn
+ */
+export async function syncPushEnableButton(pushBtn) {
+  if (!pushBtn) return;
+  if (!isAndroidPushCapable()) {
+    pushBtn.hidden = true;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    pushBtn.hidden = true;
+    return;
+  }
+  let hide = false;
+  try {
+    hide = localStorage.getItem(PUSH_OK_STORAGE) === "1" && Notification.permission === "granted";
+  } catch {
+    /* ignore */
+  }
+  if (!hide) {
+    hide = await hasActivePushSubscription();
+  }
+  if (hide) {
+    try {
+      localStorage.setItem(PUSH_OK_STORAGE, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+  pushBtn.hidden = hide;
 }
 
 function apiBase() {
@@ -203,6 +248,13 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   }
 
   setStatus?.("Android 공유 알림을 켰습니다. 이제 앱을 닫아도 공유 요청 알림을 받을 수 있습니다.");
+  try {
+    localStorage.setItem(PUSH_OK_STORAGE, "1");
+  } catch {
+    /* ignore */
+  }
+  const pushBtn = document.querySelector("#bus-share-push-enable");
+  if (pushBtn) pushBtn.hidden = true;
   void session;
   void client;
   return true;
@@ -341,7 +393,6 @@ export function initBusShareUi(client, session, setStatus) {
     shareUiBound = true;
 
     if (pushBtn) {
-      pushBtn.hidden = !isAndroidPushCapable();
       pushBtn.addEventListener("click", () => {
         pushBtn.disabled = true;
         setStatus?.("알림 설정 중…");
@@ -352,6 +403,7 @@ export function initBusShareUi(client, session, setStatus) {
           })
           .finally(() => {
             pushBtn.disabled = false;
+            void syncPushEnableButton(pushBtn);
           });
       });
     }
@@ -401,7 +453,7 @@ export function initBusShareUi(client, session, setStatus) {
     }
   }
 
-  if (pushBtn) pushBtn.hidden = !isAndroidPushCapable();
+  void syncPushEnableButton(pushBtn);
 
   const params = new URLSearchParams(window.location.search);
   if (params.get("share") === "pending" && incomingEl) {

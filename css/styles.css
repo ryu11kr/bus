@@ -1086,15 +1086,6 @@ body.bus-app button.detail-photo-hit:focus-visible {
   pointer-events: none;
 }
 
-.detail-photo-list-intro {
-  margin: 0 0 0.75rem;
-  font-size: 1.08rem;
-  font-weight: 600;
-  text-align: center;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
 .detail-photo-list {
   display: flex;
   flex-direction: column;

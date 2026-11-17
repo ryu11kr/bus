@@ -96,6 +96,82 @@ function authRedirectUrl() {
   return `${url.origin}${path}`;
 }
 
+/** 삼성 인터넷 등에서 localStorage 실패 시 sessionStorage 백업 */
+function createAuthStorage() {
+  const mirror = "bus-auth-mirror:";
+  return {
+    getItem(key) {
+      try {
+        const v = window.localStorage.getItem(key);
+        if (v != null) return v;
+      } catch {
+        /* ignore */
+      }
+      try {
+        return window.sessionStorage.getItem(mirror + key);
+      } catch {
+        return null;
+      }
+    },
+    setItem(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch {
+        /* ignore */
+      }
+      try {
+        window.sessionStorage.setItem(mirror + key, value);
+      } catch {
+        /* ignore */
+      }
+    },
+    removeItem(key) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+      try {
+        window.sessionStorage.removeItem(mirror + key);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {number} timeoutMs
+ */
+function waitForAuthReady(client, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    /** @type {{ unsubscribe: () => void } | null} */
+    let subscription = null;
+    const finish = (session) => {
+      if (settled) return;
+      settled = true;
+      subscription?.unsubscribe();
+      resolve(session);
+    };
+
+    const { data } = client.auth.onAuthStateChange((event, session) => {
+      if (session?.user || event === "SIGNED_IN") {
+        finish(session);
+      }
+    });
+    subscription = data.subscription;
+
+    client.auth.getSession().then(({ data: sessData, error }) => {
+      if (error) console.error(error);
+      if (sessData.session?.user) finish(sessData.session);
+    });
+
+    window.setTimeout(() => finish(null), timeoutMs);
+  });
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  */
@@ -135,14 +211,16 @@ function formatSignedInLabel(user) {
  * @param {import("@supabase/supabase-js").Session | null} session
  * @param {typeof DEFAULT_CLOUD_SYNC_CONFIG} cfg
  */
-async function handleSessionCloudSync(session, cfg) {
+function startSessionCloudSync(session, cfg) {
   if (!cfg.enabled || !supabaseClient || !session?.user?.id) return;
   const userId = session.user.id;
   if (!cloudSaveListenerBound) {
     bindCloudSaveListener(supabaseClient, userId, cfg.enabled);
     cloudSaveListenerBound = true;
   }
-  await runFullCloudSync(supabaseClient, userId);
+  runFullCloudSync(supabaseClient, userId).catch((error) => {
+    console.error(error);
+  });
 }
 
 /**
@@ -187,7 +265,7 @@ async function initGoogleAuthUi(client, cfg) {
     if (signedIn) {
       statusEl.textContent = formatSignedInLabel(session.user);
       if (cfg.enabled) {
-        await handleSessionCloudSync(session, cfg);
+        startSessionCloudSync(session, cfg);
       } else if (syncEl) {
         syncEl.hidden = true;
       }
@@ -238,21 +316,27 @@ async function initGoogleAuthUi(client, cfg) {
   statusEl.textContent = "로그인 상태 확인 중…";
   try {
     const oauthResult = await completeOAuthReturnIfNeeded(client);
+    let session = await waitForAuthReady(client);
+
+    if (!session?.user && oauthResult === "ok") {
+      const { data: refreshed, error: refreshErr } = await client.auth.refreshSession();
+      if (refreshErr) console.error(refreshErr);
+      session = refreshed.session || session;
+    }
+
     if (oauthResult === "error") {
       statusEl.textContent =
         "로그인을 마치지 못했습니다. 새로고침 후 다시 「구글로 로그인」을 눌러 주세요.";
-    }
-
-    const { data, error } = await client.auth.getSession();
-    if (error) throw error;
-    if (data.session?.user) {
-      await renderSession(data.session);
-    } else if (oauthResult !== "error") {
+      await renderSession(null);
+    } else if (session?.user) {
+      await renderSession(session);
+    } else {
       await renderSession(null);
     }
   } catch (error) {
     console.error(error);
     statusEl.textContent = "로그인을 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
+    loginBtn.disabled = false;
   }
 
   client.auth.onAuthStateChange((event, session) => {
@@ -260,8 +344,16 @@ async function initGoogleAuthUi(client, cfg) {
       renderSession(session).catch(() => {});
       return;
     }
-    if (event === "SIGNED_OUT") {
-      renderSession(null).catch(() => {});
+    if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+      window.setTimeout(() => {
+        client.auth.getSession().then(({ data }) => {
+          if (data.session?.user) {
+            renderSession(data.session).catch(() => {});
+          } else {
+            renderSession(null).catch(() => {});
+          }
+        });
+      }, 400);
     }
   });
 
@@ -311,9 +403,9 @@ async function initCloudSyncShell() {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: "pkce",
-        storage: window.localStorage,
+        storage: createAuthStorage(),
       },
     });
     await initGoogleAuthUi(supabaseClient, cloudSyncCfg);

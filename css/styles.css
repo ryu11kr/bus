@@ -1231,8 +1231,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   font-weight: 800;
   line-height: 1.25;
   text-align: center;
-  color: var(--brand-ink);
-  background: var(--brand-tint);
+  color: #fff;
+  background: #000;
   border: 3px solid var(--brand);
   border-radius: 0.85rem;
   box-shadow: var(--shadow);
@@ -1241,7 +1241,7 @@ body.bus-app button.detail-photo-hit:focus-visible {
 }
 
 .photo-viewer-stop-name.is-placeholder {
-  color: #64748b;
+  color: #cbd5e1;
   font-weight: 700;
 }
 

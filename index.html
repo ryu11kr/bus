@@ -162,9 +162,9 @@
             <div id="bus-share-panel" class="bus-share-panel" hidden>
               <h3 class="bus-share-heading">정류장 공유</h3>
               <p class="bus-share-help">
-                받을 사람 <strong>Gmail</strong> 또는 <strong>아이디만</strong> 입력해 보내세요. 상대는
-                <strong>홈 화면 앱을 켜고</strong> 구글 로그인만 하면
-                <strong>보낸 사람 이메일</strong>과 수락 버튼이 뜹니다. (잠금 알림 없어도 됩니다.)
+                받을 사람 <strong>Gmail</strong> 또는 <strong>아이디만</strong> 입력해 보내세요. 상대가 앱을
+                켜고 로그인하면 <strong>팝업</strong>과 목록에 <strong>보낸 사람 이메일</strong>·수락 버튼이
+                뜹니다.
               </p>
               <label class="bus-share-field" for="bus-share-to-email">받을 사람 Gmail</label>
               <input
@@ -178,31 +178,6 @@
               <button type="button" id="bus-share-send" class="big-btn secondary">
                 정류장 공유 보내기
               </button>
-              <p id="bus-share-push-banner" class="bus-share-push-banner" hidden></p>
-              <button type="button" id="bus-share-push-enable" class="big-btn secondary" hidden>
-                Android 공유 알림 켜기
-              </button>
-              <button type="button" id="bus-share-push-reset" class="big-btn ghost">
-                알림 꺼졌을 때 · 다시 켜기 준비
-              </button>
-              <details class="bus-share-push-advanced">
-                <summary class="bus-share-push-summary">
-                  잠금 화면 알림 (선택 — 안 되면 그냥 앱만 켜면 됨)
-                </summary>
-                <p class="bus-share-help bus-share-push-note">
-                  플레이 스토어 앱이 아니라 <strong>설정 → 앱 알림</strong>에 이름이 안 보일 수 있습니다.
-                  카카오톡처럼 자동으로 안 되는 기기가 많습니다.
-                </p>
-                <button type="button" id="bus-share-push-help" class="big-btn ghost">
-                  알림 허용 3단계 안내
-                </button>
-                <button type="button" id="bus-share-push-local-test" class="big-btn ghost" hidden>
-                  기기 알림 테스트 (로컬)
-                </button>
-                <button type="button" id="bus-share-push-test" class="big-btn ghost" hidden>
-                  서버 푸시 테스트
-                </button>
-              </details>
               <div id="bus-share-incoming" class="bus-share-incoming" hidden aria-live="polite"></div>
             </div>
           </details>

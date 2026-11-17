@@ -7,10 +7,6 @@
     {
       "source": "/api/share-status",
       "destination": "/api/sync-status"
-    },
-    {
-      "source": "/api/push-vapid-check",
-      "destination": "/api/push-public-key?diagnose=1"
     }
   ],
   "headers": [

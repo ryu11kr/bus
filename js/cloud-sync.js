@@ -7,14 +7,10 @@ import {
   setCloudSyncStatusCallback,
 } from "./cloud-sync-data.js";
 import {
-  bindIncomingShareLiveUpdates,
-  ensurePushSubscriptionOnServer,
   initBusShareUi,
-  refreshPushReadiness,
   refreshIncomingShareRequests,
   startIncomingSharePolling,
   stopIncomingSharePolling,
-  syncPushEnableButton,
 } from "./cloud-share.js";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
@@ -311,7 +307,6 @@ async function initGoogleAuthUi(client, cfg) {
         syncEl.textContent = text;
       };
       initBusShareUi(client, session, setShareStatus);
-      void syncPushEnableButton(document.querySelector("#bus-share-push-enable"));
       void refreshIncomingShareRequests(
         client,
         session.user.email || "",
@@ -319,8 +314,6 @@ async function initGoogleAuthUi(client, cfg) {
         setShareStatus
       );
       startIncomingSharePolling(client, setShareStatus);
-      bindIncomingShareLiveUpdates(client, setShareStatus);
-      void ensurePushSubscriptionOnServer().then(() => refreshPushReadiness(setShareStatus));
       if (ticket !== renderSerial) return;
     } else {
       stopIncomingSharePolling();

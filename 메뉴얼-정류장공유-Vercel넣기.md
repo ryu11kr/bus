@@ -1,6 +1,6 @@
-# 정류장 공유 + Android 푸시 — Supabase SQL · Vercel 환경 변수
+# 정류장 공유 — Supabase SQL · Vercel 환경 변수
 
-코드는 배포됐어도 **SQL 한 번** + **Vercel 변수** 없으면 공유·푸시가 동작하지 않습니다.
+공유는 **앱을 켜고 로그인**하면 팝업·목록에 요청이 뜹니다. (잠금 화면 푸시 없음)
 
 ---
 
@@ -21,28 +21,7 @@
 |------|---------|
 | `SUPABASE_URL` | (기존과 같음) |
 | `SUPABASE_ANON_KEY` | (기존과 같음) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API** → **service_role** (비밀, GitHub에 넣지 마세요) |
-
-### Android 푸시용 (VAPID) — 안 하면 「공유 알림 켜기」가 아무 말도 안 함
-
-확인: 브라우저에서  
-**https://bus.uxpwa.com/api/push-public-key**  
-→ `"configured":false` 이면 **VAPID 3개**를 Vercel에 넣어야 합니다.
-
-키 만들기 (하나만 택):
-
-- PC에 Node 있으면: `cd bus` 후 `npx web-push generate-vapid-keys`
-- 또는 검색: **web push vapid key generator** → Public / Private 한 쌍 생성
-
-나온 **Public Key** / **Private Key**를 Vercel에 추가:
-
-| Name | 값 |
-|------|-----|
-| `VAPID_PUBLIC_KEY` | Public Key 전체 |
-| `VAPID_PRIVATE_KEY` | Private Key 전체 |
-| `VAPID_SUBJECT` | `mailto:본인이메일@example.com` (본인 Gmail 등) |
-
-푸시 없이 **공유만** 테스트하려면 VAPID는 나중에 넣어도 됩니다.
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings** → **API** → **service_role** (수락·사진 복사에 필요) |
 
 ---
 
@@ -52,13 +31,11 @@
 
 ---
 
-## 4부: 테스트 순서 (Android)
+## 4부: 테스트 순서
 
-1. **PWA 설치** (홈 화면 추가)
-2. 두 개 Google 계정 — 남편·아내
-3. 남편: 정류장 등록 → 구글 로그인 → **내 정류장 안전하게 보관** 펼침 → **정류장 공유**에 아내 Gmail → 보내기
-4. 아내: 로그인 → 같은 패널에 **`남편@gmail.com 님이…`** 카드 → **수락**
-5. 아내: **Android 공유 알림 켜기** → 다음부터는 앱 꺼져 있어도 알림 (VAPID 설정 시)
+1. 두 개 Google 계정
+2. 보내는 사람: 정류장 등록 → 로그인 → **정류장 공유**에 받을 사람 Gmail → 보내기
+3. 받는 사람: 앱 켜기 → 로그인 → **팝업** 또는 목록에서 **수락**
 
 ---
 
@@ -66,10 +43,9 @@
 
 | 증상 | 확인 |
 |------|------|
-| 공유 보내기 실패 (빨간/일반 메시지) | **1순위:** `bus-share-setup.sql` SQL 실행했는지 · 정류장 **사진 등록 후** 보내기 |
-| 수락만 안 됨 | `SUPABASE_SERVICE_ROLE_KEY` (수락·사진 복사에 필요, **보내기는 로그인만으로 가능**) |
-| 공유 카드 안 뜸 | 아내 **로그인 Gmail** = 보낼 때 입력한 주소와 동일(소문자) |
-| 푸시 안 옴 | VAPID 3개 · PWA 설치 · 알림 허용 · **공유 알림 켜기** 버튼 |
+| 공유 보내기 실패 | `bus-share-setup.sql` 실행 · 정류장 등록 후 보내기 |
+| 수락만 안 됨 | `SUPABASE_SERVICE_ROLE_KEY` |
+| 요청이 안 뜸 | 받는 사람 **로그인 Gmail** = 보낼 때 입력한 주소(아이디만이면 @gmail.com 자동) |
 
-진단 URL (브라우저): `https://bus.uxpwa.com/api/share-status`  
-→ `shareTableReady: false` 이면 SQL 미실행, `hasServiceRole: false` 이면 수락 전에 SERVICE_ROLE 필요.
+진단: `https://bus.uxpwa.com/api/sync-status` (또는 `/api/share-status`)  
+→ `shareTableReady: false` 이면 SQL 미실행, `hasServiceRole: false` 이면 SERVICE_ROLE 필요.

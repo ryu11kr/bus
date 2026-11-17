@@ -1317,25 +1317,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   flex: 1 1 0;
 }
 
-.photo-viewer-hint {
-  margin: 0;
-  padding: 0.45rem 0.85rem 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.45;
-  text-align: center;
-  word-break: keep-all;
-  overflow-wrap: break-word;
-  color: #cbd5e1;
-  background: transparent;
-}
-
 .photo-viewer-foot .big-btn:disabled {
   opacity: 0.42;
   cursor: not-allowed;
 }
 
-.photo-viewer-hint .resp-br {
-  display: block;
-  margin-top: 0.3rem;
-}

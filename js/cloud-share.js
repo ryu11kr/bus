@@ -261,7 +261,8 @@ async function acceptShareRequest(client, userEmail, listEl, setStatus, requestI
     await runFullCloudSync(client, userId);
   }
   markPopupDismissed(requestId);
-  setStatus?.("공유한 정류장을 내 목록에 반영했습니다.");
+  setStatus?.("");
+  showBusShareHint("공유받은 정류장을 내 목록에 반영했습니다.");
   await refreshIncomingShareRequests(client, userEmail, listEl, setStatus, requestId);
 }
 

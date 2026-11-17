@@ -588,14 +588,6 @@ async function registerPushSubscriptionOnServer() {
     method: "POST",
     body: JSON.stringify({ subscription: subJson }),
   });
-  try {
-    await authFetch("push-cleanup-self", {
-      method: "POST",
-      body: JSON.stringify({ endpoint: subJson.endpoint }),
-    });
-  } catch (err) {
-    console.warn("push-cleanup-self", err);
-  }
   return true;
 }
 

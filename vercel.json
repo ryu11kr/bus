@@ -3,6 +3,16 @@
   "framework": null,
   "buildCommand": "node scripts/vercel-build-version.mjs",
   "outputDirectory": ".",
+  "rewrites": [
+    {
+      "source": "/api/share-status",
+      "destination": "/api/sync-status"
+    },
+    {
+      "source": "/api/push-vapid-check",
+      "destination": "/api/push-public-key?diagnose=1"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

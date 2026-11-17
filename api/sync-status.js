@@ -1,4 +1,6 @@
-/** GET — Supabase 환경 변수 연결 여부 (키 값은 응답하지 않음) */
+/** GET — Supabase + 공유 테이블 진단 (구 share-status 포함) */
+
+import { getAdminClient } from "./_lib/admin.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -15,9 +17,21 @@ export default async function handler(req, res) {
   const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || "").trim();
   const configured = Boolean(supabaseUrl && supabaseAnonKey);
 
+  const hasServiceRole = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim());
+  const admin = await getAdminClient();
+
+  let shareTableReady = false;
+  if (admin) {
+    const { error } = await admin.from("bus_share_requests").select("id").limit(1);
+    shareTableReady = !error;
+  }
+
   return res.status(200).json({
     configured,
     hasUrl: Boolean(supabaseUrl),
     hasAnonKey: Boolean(supabaseAnonKey),
+    hasServiceRole,
+    shareTableReady,
+    acceptNeedsServiceRole: true,
   });
 }

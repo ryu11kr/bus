@@ -6,6 +6,7 @@ import {
   runFullCloudSync,
   setCloudSyncStatusCallback,
 } from "./cloud-sync-data.js";
+import { initBusShareUi, refreshIncomingShareRequests } from "./cloud-share.js";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
   enabled: true,
@@ -290,8 +291,32 @@ async function initGoogleAuthUi(client, cfg) {
       } else if (syncEl) {
         syncEl.hidden = true;
       }
+      const setShareStatus = (text) => {
+        if (!syncEl) return;
+        if (!text) {
+          syncEl.hidden = true;
+          syncEl.textContent = "";
+          return;
+        }
+        syncEl.hidden = false;
+        syncEl.textContent = text;
+      };
+      initBusShareUi(client, session, setShareStatus);
+      void refreshIncomingShareRequests(
+        client,
+        session.user.email || "",
+        document.querySelector("#bus-share-incoming"),
+        setShareStatus
+      );
       if (ticket !== renderSerial) return;
     } else {
+      const sharePanel = document.querySelector("#bus-share-panel");
+      const incomingEl = document.querySelector("#bus-share-incoming");
+      if (sharePanel) sharePanel.hidden = true;
+      if (incomingEl) {
+        incomingEl.hidden = true;
+        incomingEl.replaceChildren();
+      }
       if (introEl) introEl.hidden = false;
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled
@@ -403,6 +428,16 @@ async function initGoogleAuthUi(client, cfg) {
       const userId = sessionData.session?.user?.id;
       if (!userId) return;
       runFullCloudSync(client, userId).catch((error) => console.error(error));
+      const email = sessionData.session?.user?.email || "";
+      const incoming = document.querySelector("#bus-share-incoming");
+      if (incoming && email) {
+        refreshIncomingShareRequests(client, email, incoming, (text) => {
+          if (!syncEl) return;
+          if (!text) return;
+          syncEl.hidden = false;
+          syncEl.textContent = text;
+        }).catch(() => {});
+      }
     });
   });
 }

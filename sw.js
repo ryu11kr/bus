@@ -13,6 +13,7 @@ const APP_SHELL = [
   "./js/app.js",
   "./js/cloud-sync.js",
   "./js/cloud-sync-data.js",
+  "./js/cloud-share.js",
   "./cloud-sync.config.json",
   "./version.json",
   "./manifest.webmanifest",
@@ -55,7 +56,7 @@ self.addEventListener("fetch", (event) => {
 
   const path = url.pathname.replace(/\/$/, "");
   if (
-    /\/(?:js\/[^/]+\.js|css\/styles\.css|version\.json|index\.html|cloud-sync\.runtime\.json)$/.test(
+    /\/(?:js\/[^/]+\.js|css\/styles\.css|version\.json|index\.html|cloud-sync\.runtime\.json|cloud-sync\.config\.json)$/.test(
       path
     )
   ) {
@@ -84,6 +85,53 @@ self.addEventListener("message", (event) => {
   if (data.type === "GET_VERSION") {
     event.source?.postMessage({ type: "VERSION", version: CACHE_NAME });
   }
+});
+
+self.addEventListener("push", (event) => {
+  /** @type {{ title?: string, body?: string, url?: string, requestId?: string }} */
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || "내버스시간표";
+  const body = data.body || "정류장 정보 공유 요청이 왔습니다.";
+  const url = data.url || "./?share=pending";
+  const tag = data.requestId ? `bus-share-${data.requestId}` : "bus-share";
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      tag,
+      data: { url },
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || "./?share=pending";
+  const absolute = new URL(target, self.location.origin).href;
+
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clients) {
+        if (client.url.startsWith(self.location.origin) && "focus" in client) {
+          await client.focus();
+          client.navigate?.(absolute);
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(absolute);
+      }
+    })()
+  );
 });
 
 async function networkFirst(request) {

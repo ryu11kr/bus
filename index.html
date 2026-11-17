@@ -159,6 +159,29 @@
                 로그아웃
               </button>
             </div>
+            <div id="bus-share-panel" class="bus-share-panel" hidden>
+              <h3 class="bus-share-heading">정류장 공유</h3>
+              <p class="bus-share-help">
+                받을 사람 <strong>Gmail</strong>을 입력해 보내세요. 상대는 로그인만 하면
+                <strong>보낸 사람 이메일</strong>이 뜨고, 수락하면 각자 목록에 반영됩니다.
+              </p>
+              <label class="bus-share-field" for="bus-share-to-email">받을 사람 Gmail</label>
+              <input
+                id="bus-share-to-email"
+                class="text-field-input bus-share-email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                placeholder="example@gmail.com"
+              />
+              <button type="button" id="bus-share-send" class="big-btn secondary">
+                정류장 공유 보내기
+              </button>
+              <button type="button" id="bus-share-push-enable" class="big-btn ghost" hidden>
+                Android 공유 알림 켜기
+              </button>
+              <div id="bus-share-incoming" class="bus-share-incoming" hidden aria-live="polite"></div>
+            </div>
           </details>
         </div>
 

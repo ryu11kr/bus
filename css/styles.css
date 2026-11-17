@@ -673,6 +673,77 @@ footer {
   width: 100%;
 }
 
+.bus-share-panel {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--line);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bus-share-heading {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.bus-share-help {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.bus-share-field {
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.bus-share-email {
+  width: 100%;
+  min-height: 3.1rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 1.15rem;
+  border: 2px solid #000;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.bus-share-incoming {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.bus-share-incoming-card {
+  padding: 0.85rem;
+  border-radius: 0.85rem;
+  border: 2px solid var(--brand-tint-border);
+  background: var(--brand-tint);
+}
+
+.bus-share-incoming-text {
+  margin: 0 0 0.65rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.bus-share-incoming-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.bus-share-incoming-actions .big-btn {
+  min-height: 3.1rem;
+  font-size: 1.05rem;
+  padding: 0.65rem 0.5rem;
+}
+
 .photo-guide-figure {
   margin: 0.75rem 0 0;
 }

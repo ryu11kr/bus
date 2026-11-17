@@ -701,6 +701,7 @@ footer {
 
 .big-btn.ghost {
   background: #fff;
+  color: var(--text);
   border: 2px solid var(--line);
 }
 
@@ -899,6 +900,7 @@ footer {
   border-radius: 1rem;
   border: 3px solid #000;
   background: #fff;
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   overflow: hidden;

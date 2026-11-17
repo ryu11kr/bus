@@ -77,12 +77,54 @@ function initApp() {
 }
 
 const APP_VERSION_SEEN_KEY = "bus-app-version-seen-build";
+const APP_UPDATE_COMPLETE_KEY = "bus-show-update-complete";
 let appVersionPollId = null;
+let appUpdateCompleteDialogBound = false;
+
+function markAppUpdateCompletePending() {
+  try {
+    sessionStorage.setItem(APP_UPDATE_COMPLETE_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function maybeShowAppUpdateCompleteDialog() {
+  try {
+    if (sessionStorage.getItem(APP_UPDATE_COMPLETE_KEY) !== "1") return;
+    sessionStorage.removeItem(APP_UPDATE_COMPLETE_KEY);
+  } catch {
+    return;
+  }
+  const dialog = document.querySelector("#app-update-complete-dialog");
+  const okBtn = document.querySelector("#app-update-complete-ok");
+  if (!dialog || !okBtn) return;
+
+  if (!appUpdateCompleteDialogBound) {
+    appUpdateCompleteDialogBound = true;
+    okBtn.addEventListener("click", () => {
+      if (dialog.open) dialog.close();
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      dialog.close();
+    });
+  }
+
+  const banner = document.querySelector("#app-update-banner");
+  if (banner) banner.hidden = true;
+
+  if (typeof dialog.showModal === "function") {
+    dialog.showModal();
+    okBtn.focus();
+  }
+}
 
 function bindAppUpdateUi() {
   document.querySelector("#app-update-apply")?.addEventListener("click", () => {
     applyAppUpdate();
   });
+  maybeShowAppUpdateCompleteDialog();
   bootstrapAppVersionCheck().catch(() => {});
   if (appVersionPollId) clearInterval(appVersionPollId);
   appVersionPollId = window.setInterval(() => {
@@ -229,6 +271,7 @@ async function applyAppUpdate() {
         commitSha: pendingSha || null,
       });
     }
+    markAppUpdateCompletePending();
     const url = new URL(location.href);
     url.searchParams.set("v", pending || String(Date.now()));
     location.replace(url.toString());

@@ -658,7 +658,8 @@ export function initBusShareUi(client, session, setStatus) {
             console.warn(pushErr);
           }
           sendInput.value = "";
-          setStatus?.("공유 요청을 보냈습니다. 상대가 수락하면 각자 목록에 반영됩니다.");
+          setStatus?.("");
+          showBusShareHint("공유 요청을 보냈습니다. 상대가 수락하면 각자 목록에 반영됩니다.");
         } catch (err) {
           console.error(err);
           setStatus?.(describeShareError(err));

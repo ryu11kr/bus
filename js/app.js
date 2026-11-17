@@ -1219,6 +1219,14 @@ function showDetailView() {
   document.querySelector("#view-detail")?.removeAttribute("hidden");
 }
 
+function updateHomeIntroChrome() {
+  const lede = document.querySelector("#app-lede");
+  const divider = document.querySelector("#app-home-divider");
+  const hasStops = busStops.length > 0;
+  if (lede) lede.hidden = hasStops;
+  if (divider) divider.hidden = !hasStops;
+}
+
 function renderStopList() {
   const list = document.querySelector("#stop-list");
   const empty = document.querySelector("#stop-list-empty");
@@ -1227,6 +1235,7 @@ function renderStopList() {
   list.replaceChildren();
   if (!busStops.length) {
     empty.hidden = false;
+    updateHomeIntroChrome();
     return;
   }
   empty.hidden = true;
@@ -1262,6 +1271,7 @@ function renderStopList() {
     li.append(btn);
     list.append(li);
   }
+  updateHomeIntroChrome();
 }
 
 function lineDisplayClass(line) {

@@ -1208,8 +1208,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   align-items: stretch;
   justify-content: center;
   padding: max(0.65rem, env(safe-area-inset-top)) 0.85rem 0.85rem;
-  background: var(--bg);
-  border-bottom: 2px solid var(--line);
+  background: #000;
+  border-bottom: 2px solid #2d3847;
 }
 
 .photo-viewer-title {
@@ -1231,8 +1231,8 @@ body.bus-app button.detail-photo-hit:focus-visible {
   font-weight: 800;
   line-height: 1.25;
   text-align: center;
-  color: #fff;
-  background: #000;
+  color: var(--brand-ink);
+  background: var(--brand-tint);
   border: 3px solid var(--brand);
   border-radius: 0.85rem;
   box-shadow: var(--shadow);
@@ -1241,7 +1241,7 @@ body.bus-app button.detail-photo-hit:focus-visible {
 }
 
 .photo-viewer-stop-name.is-placeholder {
-  color: #cbd5e1;
+  color: #64748b;
   font-weight: 700;
 }
 

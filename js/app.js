@@ -1137,6 +1137,16 @@ function updateHomeIntroChrome() {
   if (divider) divider.hidden = !hasStops;
 }
 
+function notifyBusStopsChanged() {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("bus-stops-changed", { detail: { count: busStops.length } })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 function renderStopList() {
   const list = document.querySelector("#stop-list");
   const empty = document.querySelector("#stop-list-empty");
@@ -1146,6 +1156,7 @@ function renderStopList() {
   if (!busStops.length) {
     empty.hidden = false;
     updateHomeIntroChrome();
+    notifyBusStopsChanged();
     return;
   }
   empty.hidden = true;
@@ -1182,6 +1193,7 @@ function renderStopList() {
     list.append(li);
   }
   updateHomeIntroChrome();
+  notifyBusStopsChanged();
 }
 
 

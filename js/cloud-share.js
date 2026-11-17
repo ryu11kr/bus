@@ -1,6 +1,10 @@
 /** 정류장 공유 — 앱 안 팝업·목록 (잠금 화면 푸시 없음) */
 
-import { pushLocalStateToCloud, runFullCloudSync } from "./cloud-sync-data.js";
+import {
+  getLocalBusStopCount,
+  pushLocalStateToCloud,
+  runFullCloudSync,
+} from "./cloud-sync-data.js";
 
 let shareUiBound = false;
 
@@ -325,7 +329,7 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   syncBusShareModalScrollLock();
 
   const shareTeaser = document.querySelector("#bus-share-teaser");
-  if (shareTeaser && !shareTeaser.open) {
+  if (shareTeaser && !shareTeaser.hidden && !shareTeaser.open) {
     shareTeaser.open = true;
   }
 
@@ -514,6 +518,37 @@ export async function refreshIncomingShareRequests(
   }
 }
 
+let busShareTeaserListenerBound = false;
+
+/**
+ * @param {import("@supabase/supabase-js").Session | null | undefined} session
+ * @param {number | undefined} stopCount
+ */
+export function syncBusShareTeaserVisibility(session, stopCount) {
+  const teaser = document.querySelector("#bus-share-teaser");
+  if (!teaser) return;
+  const signedIn = Boolean(session?.user);
+  const count =
+    typeof stopCount === "number" && Number.isFinite(stopCount)
+      ? stopCount
+      : getLocalBusStopCount();
+  const show = signedIn && count > 0;
+  teaser.hidden = !show;
+  if (!show) teaser.open = false;
+}
+
+function bindBusShareTeaserStopListener() {
+  if (busShareTeaserListenerBound) return;
+  busShareTeaserListenerBound = true;
+  window.addEventListener("bus-stops-changed", (ev) => {
+    const logoutBtn = document.querySelector("#cloud-sync-logout");
+    const signedIn = Boolean(logoutBtn && !logoutBtn.hidden);
+    const stopCount =
+      typeof ev?.detail?.count === "number" ? ev.detail.count : undefined;
+    syncBusShareTeaserVisibility(signedIn ? { user: {} } : null, stopCount);
+  });
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {import("@supabase/supabase-js").Session} session
@@ -525,12 +560,14 @@ export function initBusShareUi(client, session, setStatus) {
   const sendBtn = document.querySelector("#bus-share-send");
   const incomingEl = document.querySelector("#bus-share-incoming");
 
-  if (!teaser || !session?.user) {
-    if (teaser) teaser.hidden = true;
+  bindBusShareTeaserStopListener();
+
+  if (!session?.user) {
+    syncBusShareTeaserVisibility(null);
     return;
   }
 
-  teaser.hidden = false;
+  syncBusShareTeaserVisibility(session);
   bindBusShareModalScrollLock();
 
   if (!shareUiBound) {

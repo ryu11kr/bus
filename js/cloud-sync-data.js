@@ -4,6 +4,17 @@ export const BUS_STORAGE_KEY = "bus-stops-v2";
 export const BUS_PHOTOS_BUCKET = "bus-photos";
 export const CLOUD_MAX_STOPS = 30;
 
+export function getLocalBusStopCount() {
+  try {
+    const raw = localStorage.getItem(BUS_STORAGE_KEY);
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    return Array.isArray(data?.stops) ? data.stops.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 let uploadTimer = null;
 let syncInFlight = null;
 /** @type {((text: string) => void) | null} */

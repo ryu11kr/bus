@@ -697,6 +697,40 @@ footer {
   font-weight: 600;
 }
 
+.bus-share-push-advanced {
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.65rem;
+}
+
+.bus-share-push-summary {
+  font-size: 1.02rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bus-share-push-advanced .bus-share-push-note {
+  margin-top: 0.5rem;
+}
+
+.bus-share-push-banner {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 2px solid #f97316;
+  background: #fff7ed;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #9a3412;
+}
+
+.bus-share-push-banner:empty,
+.bus-share-push-banner[hidden] {
+  display: none !important;
+}
+
 .bus-share-field {
   font-size: 1.02rem;
   font-weight: 700;

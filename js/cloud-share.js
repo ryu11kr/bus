@@ -348,7 +348,45 @@ export async function resetLocalPushRegistration() {
 }
 
 const PUSH_ENABLE_LABEL = "Android 공유 알림 켜기";
-const PUSH_DENIED_LABEL = "알림 허용 후 다시 켜기";
+const PUSH_DENIED_LABEL = "1단계: Chrome에서 알림 허용하기";
+
+function syncPushBanner(perm, showEnable) {
+  const banner = document.querySelector("#bus-share-push-banner");
+  if (!banner || !isAndroidPushCapable()) {
+    if (banner) banner.hidden = true;
+    return;
+  }
+  if (!showEnable) {
+    banner.hidden = true;
+    banner.textContent = "";
+    return;
+  }
+  banner.hidden = false;
+  if (perm === "denied") {
+    banner.textContent =
+      "지금 알림이 차단(denied)입니다. 이 버튼만으로는 허용 팝업이 안 뜹니다. " +
+      "먼저 위 주소창 왼쪽 ⓘ/자물쇠 → 알림 → 허용 한 뒤, 다시 아래 버튼을 누르세요.";
+    return;
+  }
+  if (!isInstalledPwa()) {
+    banner.textContent =
+      "Chrome 탭이 아니라 홈 화면「내버스시간표」아이콘으로 여는 것을 권장합니다. 그래도 아래에서 알림을 켤 수 있습니다.";
+    return;
+  }
+  if (perm === "default") {
+    banner.textContent = "아래 버튼을 누르면 알림 허용 팝업이 뜹니다.";
+    return;
+  }
+  banner.textContent = "알림 구독을 다시 등록하려면 아래 버튼을 누르세요.";
+}
+
+function expandPushSectionIfNeeded() {
+  const details = document.querySelector(".bus-share-push-advanced");
+  if (!details || !isAndroidPushCapable()) return;
+  if (Notification.permission !== "granted") {
+    details.open = true;
+  }
+}
 
 /**
  * @param {HTMLButtonElement | null} pushBtn
@@ -357,15 +395,18 @@ export async function syncPushEnableButton(pushBtn) {
   if (!pushBtn) return;
   if (!isAndroidPushCapable()) {
     pushBtn.hidden = true;
+    syncPushBanner("unsupported", false);
     return;
   }
 
-  pushBtn.hidden = false;
   const perm = Notification.permission;
 
   if (perm !== "granted") {
     clearPushOkStorage();
+    pushBtn.hidden = false;
     pushBtn.textContent = perm === "denied" ? PUSH_DENIED_LABEL : PUSH_ENABLE_LABEL;
+    syncPushBanner(perm, true);
+    expandPushSectionIfNeeded();
     return;
   }
 
@@ -379,6 +420,7 @@ export async function syncPushEnableButton(pushBtn) {
 
   if (subscribed && markedOk) {
     pushBtn.hidden = true;
+    syncPushBanner(perm, false);
     return;
   }
 
@@ -387,6 +429,7 @@ export async function syncPushEnableButton(pushBtn) {
   }
   pushBtn.textContent = PUSH_ENABLE_LABEL;
   pushBtn.hidden = false;
+  syncPushBanner(perm, true);
 }
 
 function apiBase() {
@@ -597,9 +640,12 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   }
   if (Notification.permission === "denied") {
     showBusShareHint(
-      "이 사이트 알림이 **차단** 상태입니다.\n\n" +
-        "Chrome 탭에서 bus.uxpwa.com 열기 → 주소창 왼쪽 ⓘ/자물쇠 → **알림 → 허용**\n\n" +
-        "그다음 이 화면에서 「Android 공유 알림 켜기」를 다시 누르세요."
+      "알림이 **차단(denied)** 이라 이 화면에서는 허용 팝업이 안 뜹니다.\n\n" +
+        "【지금 이 Chrome 탭에서】\n" +
+        "맨 위 주소창 **왼쪽 ⓘ 또는 자물쇠** 누르기 → **알림** → **허용**\n\n" +
+        "허용한 뒤 이 페이지로 돌아와서\n" +
+        "「Android 공유 알림 켜기」를 다시 누르세요.\n\n" +
+        "ⓘ 메뉴가 없으면: Chrome ⋮ → 설정 → 사이트 설정 → 알림 → bus.uxpwa.com → 허용"
     );
     return false;
   }
@@ -976,6 +1022,13 @@ export function initBusShareUi(client, session, setStatus) {
 
     if (pushBtn) {
       pushBtn.addEventListener("click", () => {
+        if (Notification.permission === "denied") {
+          showBusShareHint(
+            "먼저 주소창 **왼쪽 ⓘ/자물쇠 → 알림 → 허용** 하세요.\n\n" +
+              "차단 상태에서는 앱이 허용 창을 띄울 수 없습니다."
+          );
+          return;
+        }
         pushBtn.disabled = true;
         setStatus?.("알림 설정 중…");
         tryEnableAndroidPush(client, session, setStatus)
@@ -999,12 +1052,16 @@ export function initBusShareUi(client, session, setStatus) {
         pushResetBtn.disabled = true;
         void resetLocalPushRegistration()
           .then(() => syncPushEnableButton(pushBtn))
-          .then(() => {
-            showBusShareHint(
-              "앱 안의 알림 기록을 초기화했습니다.\n\n" +
-                "「Android 공유 알림 켜기」가 보이면 눌러 허용하세요.\n" +
-                "차단해 둔 적 있으면 Chrome 탭에서 bus.uxpwa.com → ⓘ → 알림 허용부터 하세요."
-            );
+          .then(async () => {
+            await syncPushEnableButton(pushBtn);
+            const perm = Notification.permission;
+            const msg =
+              perm === "denied"
+                ? "초기화했습니다. 알림이 **차단** 상태입니다.\n\n" +
+                  "주소창 왼쪽 ⓘ → 알림 **허용** 후\n" +
+                  "「Android 공유 알림 켜기」를 누르세요."
+                : "초기화했습니다.\n\n「Android 공유 알림 켜기」 버튼이 보이면 눌러 허용하세요.";
+            showBusShareHint(msg);
           })
           .finally(() => {
             pushResetBtn.disabled = false;

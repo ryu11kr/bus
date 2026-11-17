@@ -16,6 +16,42 @@ const SHARE_POLL_MS = 12_000;
 /** @type {number | null} */
 let sharePollTimer = null;
 let shareLiveUpdatesBound = false;
+let modalScrollLockY = 0;
+let modalScrollLockBound = false;
+
+function isBusShareModalOpen() {
+  const share = document.querySelector("#bus-share-popup");
+  const hint = document.querySelector("#bus-share-hint-dialog");
+  return Boolean(share?.open || hint?.open);
+}
+
+function syncBusShareModalScrollLock() {
+  if (isBusShareModalOpen()) {
+    if (!document.body.classList.contains("bus-modal-scroll-lock")) {
+      modalScrollLockY = window.scrollY || 0;
+      document.body.classList.add("bus-modal-scroll-lock");
+      document.body.style.top = `-${modalScrollLockY}px`;
+    }
+    return;
+  }
+  if (document.body.classList.contains("bus-modal-scroll-lock")) {
+    document.body.classList.remove("bus-modal-scroll-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, modalScrollLockY);
+  }
+}
+
+function bindBusShareModalScrollLock() {
+  if (modalScrollLockBound) return;
+  modalScrollLockBound = true;
+  for (const id of ["bus-share-popup", "bus-share-hint-dialog"]) {
+    const dialog = document.querySelector(`#${id}`);
+    if (!dialog) continue;
+    dialog.addEventListener("close", () => {
+      syncBusShareModalScrollLock();
+    });
+  }
+}
 
 export function stopIncomingSharePolling() {
   if (sharePollTimer != null) {
@@ -100,7 +136,9 @@ function showBusShareHint(message) {
 
   bodyEl.textContent = message;
   if (dialog.open) dialog.close();
+  bindBusShareModalScrollLock();
   dialog.showModal();
+  syncBusShareModalScrollLock();
   okBtn.focus();
 }
 
@@ -458,7 +496,9 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   popupCurrentRequest = { id: String(row.id), from_email: row.from_email };
   bodyEl.textContent = `${row.from_email} 님이 버스 정류장 정보를 공유했습니다.`;
   bindSharePopupOnce(client, userEmail, listEl, setStatus);
+  bindBusShareModalScrollLock();
   dialog.showModal();
+  syncBusShareModalScrollLock();
 
   const teaser = document.querySelector("#cloud-sync-teaser");
   if (teaser && !teaser.open) {
@@ -668,6 +708,7 @@ export function initBusShareUi(client, session, setStatus) {
   }
 
   root.hidden = false;
+  bindBusShareModalScrollLock();
 
   if (!shareUiBound) {
     shareUiBound = true;

@@ -69,7 +69,8 @@ body.bus-app {
   border: 0;
 }
 
-body.bus-app.photo-viewer-lock {
+body.bus-app.photo-viewer-lock,
+body.bus-app.bus-modal-scroll-lock {
   position: fixed;
   inset: 0;
   width: 100%;

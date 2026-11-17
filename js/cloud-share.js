@@ -10,6 +10,33 @@ const SHARE_POPUP_DISMISSED_KEY = "bus-share-popup-dismissed";
 /** @type {{ id: string, from_email: string } | null} */
 let popupCurrentRequest = null;
 let sharePopupBound = false;
+let shareHintBound = false;
+
+/**
+ * @param {string} message
+ */
+function showBusShareHint(message) {
+  const dialog = document.querySelector("#bus-share-hint-dialog");
+  const bodyEl = document.querySelector("#bus-share-hint-body");
+  const okBtn = document.querySelector("#bus-share-hint-ok");
+  if (!dialog || !bodyEl || !okBtn) return;
+
+  if (!shareHintBound) {
+    shareHintBound = true;
+    okBtn.addEventListener("click", () => {
+      if (dialog.open) dialog.close();
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      dialog.close();
+    });
+  }
+
+  bodyEl.textContent = message;
+  if (dialog.open) dialog.close();
+  dialog.showModal();
+  okBtn.focus();
+}
 
 function normalizeEmail(email) {
   let raw = String(email || "")
@@ -597,11 +624,13 @@ export function initBusShareUi(client, session, setStatus) {
 
     if (sendBtn && sendInput) {
       sendBtn.addEventListener("click", async () => {
-        const toEmail = normalizeEmail(sendInput.value);
-        if (!toEmail) {
-          setStatus?.("받을 사람 Gmail을 입력해 주세요.");
+        const raw = String(sendInput.value || "").trim();
+        if (!raw) {
+          showBusShareHint("받을 사람 Gmail을 입력해 주세요.");
+          sendInput.focus();
           return;
         }
+        const toEmail = normalizeEmail(raw);
         sendBtn.disabled = true;
         setStatus?.("클라우드에 저장한 뒤 공유합니다…");
         try {

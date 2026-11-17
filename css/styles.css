@@ -758,6 +758,21 @@ footer {
   gap: 0.55rem;
 }
 
+.bus-share-hint-dialog {
+  width: min(22rem, calc(100% - 1.5rem));
+}
+
+.bus-share-hint-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.bus-share-hint-dialog #bus-share-hint-body {
+  font-weight: 700;
+}
+
 .photo-guide-figure {
   margin: 0.75rem 0 0;
 }

@@ -45,7 +45,7 @@
 |------|------|
 | 공유 보내기 실패 | `bus-share-setup.sql` 실행 · 정류장 등록 후 보내기 |
 | 수락만 안 됨 | `SUPABASE_SERVICE_ROLE_KEY` |
-| 요청이 안 뜸 | 받는 사람 **로그인 Gmail** = 보낼 때 입력한 주소 · Supabase에서 **`bus-share-gmail-rls-patch.sql` Run** (한 번) |
+| 요청이 안 뜸 | 보낼 Gmail = 받는 사람 **구글 로그인 주소와 글자 그대로** (대소문자 무관) |
 
 진단: `https://bus.uxpwa.com/api/sync-status` (또는 `/api/share-status`)  
 → `shareTableReady: false` 이면 SQL 미실행, `hasServiceRole: false` 이면 SERVICE_ROLE 필요.

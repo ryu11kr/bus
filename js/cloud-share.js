@@ -113,23 +113,7 @@ function showBusShareHint(message) {
   okBtn.focus();
 }
 
-function canonicalGmailAddress(email) {
-  const e = String(email || "")
-    .trim()
-    .toLowerCase();
-  const at = e.lastIndexOf("@");
-  if (at < 1) return e;
-  let local = e.slice(0, at);
-  let domain = e.slice(at + 1);
-  if (domain === "googlemail.com") domain = "gmail.com";
-  if (domain === "gmail.com") {
-    local = local.replace(/\./g, "");
-    const plus = local.indexOf("+");
-    if (plus >= 0) local = local.slice(0, plus);
-  }
-  return `${local}@${domain}`;
-}
-
+/** 소문자만 맞춤. 받는 사람 Gmail은 로그인 주소와 글자 그대로 같아야 함 */
 function normalizeEmail(email) {
   let raw = String(email || "")
     .trim()
@@ -138,24 +122,7 @@ function normalizeEmail(email) {
   if (!raw.includes("@")) {
     raw = `${raw}@gmail.com`;
   }
-  return canonicalGmailAddress(raw);
-}
-
-/** DB에 옛 주소 형식이 있어도 조회되게 */
-function shareEmailLookupKeys(userEmail) {
-  const canon = normalizeEmail(userEmail);
-  const raw = String(userEmail || "")
-    .trim()
-    .toLowerCase();
-  const keys = new Set([canon]);
-  if (raw.includes("@")) keys.add(raw);
-  if (raw && !raw.includes("@")) keys.add(`${raw}@gmail.com`);
-  return [...keys];
-}
-
-function isIncomingShareForUser(row, userEmail) {
-  const keys = new Set(shareEmailLookupKeys(userEmail));
-  return keys.has(normalizeEmail(row.to_email));
+  return raw;
 }
 
 function apiBase() {
@@ -462,28 +429,18 @@ export async function refreshIncomingShareRequests(
     return;
   }
 
-  const lookup = shareEmailLookupKeys(userEmail);
-  const { data: rawRows, error } = await client
+  const { data, error } = await client
     .from("bus_share_requests")
-    .select("id, from_email, to_email, created_at")
+    .select("id, from_email, created_at")
     .eq("status", "pending")
-    .in("to_email", lookup)
+    .eq("to_email", email)
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error(error);
-    const msg = String(error.message || error.code || "");
-    if (msg.includes("bus_canonical_gmail") || error.code === "42883") {
-      setStatus?.(
-        "Supabase에서 bus-share-gmail-rls-patch.sql 을 Run 해 주세요. (Gmail 주소 맞춤)"
-      );
-    } else {
-      setStatus?.("공유 요청을 불러오지 못했습니다.");
-    }
+    setStatus?.("공유 요청을 불러오지 못했습니다.");
     return;
   }
-
-  const data = (rawRows || []).filter((row) => isIncomingShareForUser(row, userEmail));
 
   if (listEl) {
     listEl.replaceChildren();
@@ -611,7 +568,8 @@ export function initBusShareUi(client, session, setStatus) {
           setStatus?.("");
           showBusShareHint(
             "공유 요청을 보냈습니다.\n\n" +
-              "받는 사람은 앱을 켜고 로그인하면 팝업·목록에 요청이 뜹니다."
+              "받는 사람은 앱을 켜고 **같은 Gmail**로 로그인하면 팝업이 뜹니다.\n" +
+              "(입력한 주소 = 상대 구글 로그인 주소와 같아야 합니다)"
           );
         } catch (err) {
           console.error(err);

@@ -41,6 +41,8 @@ html:has(body.bus-app) {
 
 body.bus-app {
   touch-action: pan-y;
+  font-size: 1.0625rem;
+  line-height: 1.55;
 }
 
 .bus-file-input {
@@ -496,7 +498,7 @@ footer {
 .app-guide {
   margin: 0 0 1.15rem;
   padding: 0.85rem 1rem;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   line-height: 1.65;
   text-align: left;
   text-wrap: pretty;
@@ -517,7 +519,7 @@ footer {
 
 @media (max-width: 28rem) {
   .app-guide {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
   }
 
   .resp-br,
@@ -551,7 +553,7 @@ footer {
 }
 
 .home-more summary {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 800;
   cursor: pointer;
 }
@@ -559,8 +561,8 @@ footer {
 .home-more-list {
   margin: 0.65rem 0 0;
   padding-left: 1.15rem;
-  font-size: 1rem;
-  line-height: 1.55;
+  font-size: 1.12rem;
+  line-height: 1.58;
   color: var(--muted);
 }
 
@@ -574,16 +576,17 @@ footer {
 
 .cloud-sync-teaser-msg {
   margin: 0.65rem 0 0;
-  font-size: 1rem;
-  line-height: 1.55;
+  font-size: 1.12rem;
+  line-height: 1.58;
   color: var(--muted);
 }
 
 .cloud-sync-teaser-help {
   margin: 0.55rem 0 0;
-  font-size: 0.98rem;
-  line-height: 1.5;
+  font-size: 1.1rem;
+  line-height: 1.55;
   color: var(--muted);
+  font-weight: 600;
 }
 
 .cloud-sync-auth {
@@ -595,16 +598,18 @@ footer {
 
 .cloud-sync-auth-status {
   margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.5;
+  font-size: 1.1rem;
+  line-height: 1.55;
   color: var(--muted);
+  font-weight: 600;
 }
 
 .cloud-sync-sync-status {
   margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.45;
+  font-size: 1.08rem;
+  line-height: 1.5;
   color: var(--text);
+  font-weight: 600;
 }
 
 .cloud-sync-auth .big-btn {
@@ -814,7 +819,7 @@ footer {
 
 .install-hint {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   text-align: center;
   color: var(--muted);
 }
@@ -858,6 +863,8 @@ footer {
 .dialog-help {
   margin: 0 0 1rem;
   text-align: center;
+  font-size: 1.12rem;
+  line-height: 1.55;
 }
 
 .pick-field {
@@ -934,7 +941,7 @@ footer {
 
 .stop-card-date {
   justify-self: end;
-  font-size: clamp(0.9rem, 3.4vw, 1rem);
+  font-size: clamp(1.02rem, 3.6vw, 1.12rem);
   font-weight: 700;
   line-height: 1.2;
   color: #0369a1;
@@ -987,7 +994,7 @@ footer {
 
 .detail-meta {
   margin: 0 0 1rem;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   text-align: center;
   font-weight: 600;
 }
@@ -1003,7 +1010,7 @@ footer {
 
 .detail-text-label {
   margin: 0 0 0.85rem;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   font-weight: 800;
   text-align: center;
   color: var(--muted);
@@ -1074,7 +1081,7 @@ body.bus-app button.detail-photo-hit:focus-visible {
 
 .detail-photo-hint {
   margin: 0.65rem 0 0;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   font-weight: 600;
   line-height: 1.5;
   word-break: keep-all;

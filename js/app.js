@@ -1,4 +1,4 @@
-/** @type {{ cachePrefix?: string; name?: string; description?: string } | null} */
+﻿/** @type {{ cachePrefix?: string; name?: string; description?: string } | null} */
 let pwaConfig = null;
 
 const installBtn = document.querySelector("#install-btn");
@@ -19,8 +19,6 @@ const watchedRegistrations = new WeakSet();
 let lastListedBuild = null;
 let registeredTargetBuild = 0;
 
-/** 등록 시 사진만 저장 + 기기에서 선명도 보정 */
-const REGISTER_PHOTO_ONLY = true;
 const PHOTO_MAX_WIDTH = 1680;
 const PHOTO_JPEG_QUALITY = 0.9;
 
@@ -39,10 +37,6 @@ async function init() {
 }
 
 const BUS_STORAGE_KEY = "bus-stops-v2";
-const AI_SETTINGS_KEY = "bus-ai-settings";
-const TESSERACT_CDN =
-  "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-const DEFAULT_AI_ENDPOINT = "/api/ocr-refine";
 
 /**
  * @typedef {{ id: string, name: string, photoThumb: string, ocrText: string, sections: { title: string | null, lines: string[] }[], updatedAt: string }} BusStop
@@ -56,7 +50,7 @@ let activeStopId = null;
 let activePhotoId = null;
 /** @type {string | null} */
 let replacePhotoId = null;
-/** @type {{ photoThumb: string, ocrText: string, sections: { title: string | null, lines: string[] }[] } | null} */
+/** @type {{ photoThumb: string } | null} */
 let pendingStopDraft = null;
 /** @type {"new" | "replace" | "rename" | "add-photo" | "replace-photo" | "photo-label" | "rename-photo-label" | null} */
 let pendingStopAction = null;
@@ -257,27 +251,6 @@ async function applyAppUpdate() {
   await finish();
 }
 
-function getAiSettings() {
-  try {
-    const raw = localStorage.getItem(AI_SETTINGS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        auto: parsed.auto !== false,
-        endpoint:
-          typeof parsed.endpoint === "string" && parsed.endpoint.trim()
-            ? parsed.endpoint.trim()
-            : DEFAULT_AI_ENDPOINT,
-      };
-    }
-  } catch {
-  }
-  return { auto: false, endpoint: DEFAULT_AI_ENDPOINT };
-}
-
-function saveAiSettings(settings) {
-  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings));
-}
 
 function bindBusUi() {
   const fileCamera = document.querySelector("#file-camera");
@@ -845,8 +818,8 @@ function photoFromDraft(draft, label) {
     id: newStopId(),
     photoThumb: draft.photoThumb,
     label: typeof label === "string" ? label.trim() : "",
-    ocrText: draft.ocrText || "",
-    sections: Array.isArray(draft.sections) ? draft.sections : [],
+    ocrText: "",
+    sections: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -918,11 +891,6 @@ function loadBusState() {
             photos: Array.isArray(s.photos) ? s.photos : [],
             updatedAt: s.updatedAt || new Date().toISOString(),
           };
-          if (!stop.photos.length && stop.photoThumb) {
-            stop.sections = stop.sections.length
-              ? stop.sections
-              : buildSectionsFromOcr(stop.ocrText || "");
-          }
           return normalizeStopPhotos(stop);
         });
     }
@@ -993,78 +961,26 @@ function setBusStatus(message) {
   syncBusMainVisibility();
 }
 
-function setOcrProgress(show, value) {
-  const bars = document.querySelectorAll(".ocr-progress");
-  bars.forEach((bar) => {
-    bar.hidden = !show;
-    if (!show) bar.removeAttribute("value");
-    else if (typeof value === "number") bar.value = Math.round(value * 100);
-  });
-  syncBusMainVisibility();
-}
 
 async function handleBusPhoto(input) {
   const file = input?.files?.[0];
   if (!file) return;
   photoPipelineBusy = true;
 
-  if (!REGISTER_PHOTO_ONLY && !navigator.onLine) {
-    setBusStatus("등록하려면 인터넷이 필요합니다. 와이파이·데이터를 켠 뒤 다시 시도해 주세요.");
-    pendingStopAction = null;
-    return;
-  }
-
-  setBusStatus(
-    REGISTER_PHOTO_ONLY
-      ? "사진을 읽는 중입니다…"
-      : "사진을 저장합니다. 잠시만 기다려 주세요."
-  );
+  setBusStatus("사진을 읽는 중입니다…");
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
     const maxW = effectivePhotoMaxWidth();
     const thumb = await compressImageFile(file, maxW, (phase) => {
-      if (!REGISTER_PHOTO_ONLY) return;
       if (phase === "enhance") {
         setBusStatus("밝기·선명도를 자동 보정하는 중입니다…");
       } else if (phase === "encode") {
         setBusStatus("보정한 사진을 저장하는 중입니다…");
       }
     });
-    let text = "";
-    let sections = [];
-    let ocrSource = "photo";
 
-    if (!REGISTER_PHOTO_ONLY) {
-      setOcrProgress(true, 0);
-      const blob = await fetch(thumb).then((r) => r.blob());
-      const ocr = await recognizeTextFromImage(blob);
-      text = ocr.text.trim();
-      ocrSource = "tesseract";
-
-      if (shouldUseAiRefineOnRegister()) {
-        setBusStatus("사진을 저장하는 중입니다. 잠시만 기다려 주세요.");
-        const ai = await refineTimetableWithAi(thumb);
-        if (ai?.text) {
-          text = ai.text.trim();
-          ocrSource = "ai";
-        }
-      }
-
-      sections = buildSectionsFromOcr(text);
-      if (isOcrLowQuality(text)) {
-        text = "";
-        sections = [];
-      }
-      setOcrProgress(false);
-    }
-
-    pendingStopDraft = {
-      photoThumb: thumb,
-      ocrText: text,
-      sections,
-      ocrSource,
-    };
+    pendingStopDraft = { photoThumb: thumb };
 
     if (pendingStopAction === "add-photo" && replaceStopId) {
       const stop = busStops.find((s) => s.id === replaceStopId);
@@ -1117,11 +1033,7 @@ async function handleBusPhoto(input) {
     pendingStopAction = pendingStopAction || "new";
     openNameDialog("new-stop", { stopName: "" });
 
-    setBusStatus(
-      REGISTER_PHOTO_ONLY
-        ? "보정을 마쳤습니다. 먼저 정류장 이름을 적어 주세요."
-        : "먼저 정류장 이름을 적어 주세요."
-    );
+    setBusStatus("보정을 마쳤습니다. 먼저 정류장 이름을 적어 주세요.");
   } catch (error) {
     console.error(error);
     const hint =
@@ -1136,7 +1048,6 @@ async function handleBusPhoto(input) {
   } finally {
     if (input) input.value = "";
     photoPipelineBusy = false;
-    setOcrProgress(false);
   }
 }
 
@@ -1274,495 +1185,6 @@ function renderStopList() {
   updateHomeIntroChrome();
 }
 
-function lineDisplayClass(line) {
-  if (isLikelySectionTitle(line)) return "ocr-line--heading";
-  if (/^\d{1,4}\s*번/.test(line) || /^노선\s*\d/.test(line)) return "ocr-line--route";
-  if (/\d{1,2}\s*[:：.．]\s*\d{2}/.test(line) || /^\d{4}$/.test(line.replace(/\s/g, ""))) {
-    return "ocr-line--time";
-  }
-  if (/(평일|주말|토요|일요|공휴|방향|행)/.test(line)) return "ocr-line--label";
-  return "ocr-line--body";
-}
-
-function compactKoreanLine(text) {
-  return text.replace(/\s+/g, "");
-}
-
-function isDirectionBlockTitle(title) {
-  if (typeof title !== "string") return false;
-  const c = compactKoreanLine(title.trim());
-  if (c.length <= 28 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c)) return true;
-  return c.length <= 28 && /[→➔]/.test(title) && !/\d{1,2}[:：]/.test(c);
-}
-
-function isDirectionHeadingLine(line) {
-  const c = compactKoreanLine(String(line).trim());
-  return c.length <= 24 && /.+방면$/.test(c) && !/\d{1,2}[:：]/.test(c);
-}
-
-function cleanMarkdownHeading(text) {
-  return String(text).trim().replace(/#{1,6}\s*/g, "").trim();
-}
-
-function formatDirectionTitle(title) {
-  const t = cleanMarkdownHeading(title);
-  const c = compactKoreanLine(t);
-  if (/[→➔]/.test(t) && !/.+방면$/.test(c)) return t;
-  if (!/.+방면$/.test(c)) return t;
-  return `${c.replace(/방면$/, "")} 방면`;
-}
-
-/** 방면 제목·줄을 기준으로 재산형 표를 블록 단위로 펼친다 */
-function normalizeSectionsForDisplay(sections) {
-  /** @type {{ title: string | null, lines: string[] }[]} */
-  const out = [];
-
-  for (const block of sections) {
-    /** @type {{ kind: "title" | "line", text: string }[]} */
-    const stream = [];
-    if (block.title?.trim()) {
-      stream.push({ kind: "title", text: block.title.trim() });
-    }
-    for (const line of block.lines || []) {
-      if (line?.trim()) stream.push({ kind: "line", text: line.trim() });
-    }
-
-    let current = { title: null, lines: [] };
-
-    const flush = () => {
-      if (!current.title && !current.lines.length) return;
-      out.push({
-        title: current.title,
-        lines: [...current.lines],
-      });
-      current = { title: null, lines: [] };
-    };
-
-    for (const item of stream) {
-      const text = item.text;
-      if (isDirectionHeadingLine(text)) {
-        flush();
-        current = { title: formatDirectionTitle(text), lines: [] };
-        continue;
-      }
-
-      if (item.kind === "title") {
-        flush();
-        current = {
-          title: isDirectionBlockTitle(text)
-            ? formatDirectionTitle(text)
-            : text,
-          lines: [],
-        };
-        continue;
-      }
-
-      if (
-        current.title &&
-        compactKoreanLine(text) === compactKoreanLine(current.title) &&
-        isDirectionBlockTitle(current.title)
-      ) {
-        continue;
-      }
-
-      current.lines.push(text);
-    }
-    flush();
-  }
-
-  return out.filter((b) => b.title || b.lines.some((l) => l.trim()));
-}
-
-function isTableColumnHeader(line) {
-  const compact = line.replace(/\s+/g, "");
-  return (
-    /^출발시간.*종착지/.test(compact) ||
-    /^출발.*종착/.test(compact) ||
-    /^시간.*행선/.test(compact)
-  );
-}
-
-/** 표 칸 라벨만 있는 줄 — 정류장 이름과 무관한 공통 필터 */
-function isTableLabelNoiseLine(line) {
-  const t = String(line).trim();
-  const c = t.replace(/\s+/g, "");
-  if (
-    /^(출발)?시간$|^출발시간$|^목적지$|^종착지$|^경유지$|^행선지?$|^시각$|^출발$|^도착$/.test(
-      c
-    )
-  ) {
-    return true;
-  }
-  if (/^출발\s*시간$/i.test(t) && !/\d{1,2}\s*[:：]/.test(t)) return true;
-  return isTableColumnHeader(line);
-}
-
-function polishTranscriptLines(rawLines) {
-  const out = [];
-  for (let i = 0; i < rawLines.length; i++) {
-    let line = rawLines[i];
-    if (isTableLabelNoiseLine(line)) continue;
-
-    const next = rawLines[i + 1];
-    const nextIsDest =
-      next &&
-      !isTableLabelNoiseLine(next) &&
-      !isDirectionHeadingLine(next) &&
-      !isLikelySectionTitle(next) &&
-      countTimeTokens(next) === 0 &&
-      /^[가-힣0-9·/\-]{1,24}$/.test(next.trim());
-
-    if (
-      countTimeTokens(line) === 1 &&
-      !lineHasTimeAndDestination(line) &&
-      nextIsDest
-    ) {
-      line = `${normalizeScheduleRow(line)} | ${next.trim()}`;
-      i++;
-    } else if (lineLooksLikeTimeValue(line)) {
-      line = normalizeScheduleRow(line);
-    }
-
-    out.push(line);
-  }
-  return out;
-}
-
-function sectionsFromTranscriptLines(rawLines) {
-  const lines = polishTranscriptLines(rawLines);
-  if (!lines.length) return [];
-
-  /** @type {{ title: string | null, lines: string[] }[]} */
-  const sections = [];
-  let current = { title: null, lines: [] };
-
-  const flush = () => {
-    if (!current.title && !current.lines.length) return;
-    sections.push({ title: current.title, lines: [...current.lines] });
-    current = { title: null, lines: [] };
-  };
-
-  for (const line of lines) {
-    if (isDirectionHeadingLine(line)) {
-      flush();
-      current.title = formatDirectionTitle(line);
-      continue;
-    }
-    if (isLikelySectionTitle(line) && !lineLooksLikeTimeValue(line)) {
-      flush();
-      current.title =
-        isDirectionBlockTitle(line) ? formatDirectionTitle(line) : line;
-      continue;
-    }
-    current.lines.push(line);
-  }
-  flush();
-
-  if (!sections.length) return [{ title: null, lines }];
-  return stripPrivacyFromSections(sections);
-}
-
-function isContactMetaLine(line) {
-  const t = String(line).trim();
-  if (!t) return false;
-  if (/\(전화\)|전화\s*[:：]/.test(t)) return true;
-  if (/010[\s\-·]?\d{4}/.test(t)) return true;
-  if (/\d{2,4}\s*[-·．]\s*\d{3,4}/.test(t) && /정류|마트|슈퍼|문의|택시|운수/.test(t)) {
-    return true;
-  }
-  if (/정류소|슈퍼\s*마트|봉화\s*슈퍼/.test(t) && /\d/.test(t)) return true;
-  return false;
-}
-
-function stripPrivacyFromSections(sections) {
-  return sections
-    .map((block) => ({
-      ...block,
-      lines: (block.lines || []).filter((line) => !isContactMetaLine(line)),
-    }))
-    .filter((block) => block.title || block.lines.length);
-}
-
-function countTimeTokens(line) {
-  return (line.match(/\d{1,2}\s*[:：.．]\s*\d{2}/g) || []).length;
-}
-
-/** 출발 시각 + 종착지명 (2열 시각 표가 아님) */
-function lineHasTimeAndDestination(line) {
-  if (lineHasPairedBusTimes(line)) return false;
-  if (countTimeTokens(line) !== 1) return false;
-  const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
-  if (!m) return false;
-  const after = line.slice((m.index ?? 0) + m[0].length).replace(/^\s*[\|｜]\s*/, "").trim();
-  return /[가-힣A-Za-z]{2,}/.test(after);
-}
-
-/** 한 줄에 시각 두 개 + `|` 또는 12시간 괄호 (2열 표) */
-function lineHasPairedBusTimes(line) {
-  if (countTimeTokens(line) < 2) return false;
-  const times = [...line.matchAll(/\d{1,2}\s*[:：.．]\s*\d{2}/g)];
-  const between = line.slice(
-    times[0].index + times[0][0].length,
-    times[1].index
-  );
-  if (/[\|｜]/.test(between)) return true;
-  return /[\(\（]\s*\d{1,2}\s*[:：.．]/.test(between);
-}
-
-/** @param {string} line */
-function parseTimetableRowParts(line) {
-  if (lineHasPairedBusTimes(line)) return null;
-  const timeMatch = line.match(/(\d{1,2}\s*[:：.．]\s*\d{2})/);
-  if (!timeMatch) return null;
-  const parsed = parseMinutesFromLine(line);
-  if (parsed == null) return null;
-  const h = Math.floor(parsed / 60);
-  const m = parsed % 60;
-  const timeDisplay = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  let rest = line.slice((timeMatch.index ?? 0) + timeMatch[0].length);
-  rest = rest
-    .replace(/^\s*[\|｜]\s*/, "")
-    .replace(/[\(\（][^)\）]*$/, "")
-    .replace(/^[\)\）\s]+/, "")
-    .trim();
-  return { timeDisplay, destination: rest || null };
-}
-
-/** 재산형(출발|종착 표)일 때만 2열 — `|` 또는 머리글이 있는 블록만 */
-function blockUsesTableLayout(lines) {
-  if (!lines?.length) return false;
-  if (lines.some(isTableColumnHeader)) return true;
-  const timeDestRows = lines.filter(lineHasTimeAndDestination);
-  if (timeDestRows.length >= 2) return true;
-
-  const piped = lines.filter((l) => /[\|｜]/.test(l));
-  if (piped.length < 2) return false;
-  const pairedRows = piped.filter(lineHasPairedBusTimes);
-  if (pairedRows.length >= 2) return false;
-  return true;
-}
-
-/**
- * @param {string} line
- * @param {number} blockIndex
- * @param {number} groupIndex
- * @param {boolean} useTableLayout
- */
-function buildOcrLineElement(line, blockIndex, groupIndex, useTableLayout) {
-  const li = document.createElement("li");
-  li.dataset.blockIndex = String(blockIndex);
-  li.dataset.groupIndex = String(groupIndex);
-
-  if (isContactMetaLine(line)) {
-    li.className = "ocr-line--meta";
-    li.textContent = line;
-    return li;
-  }
-
-  if (useTableLayout && isTableColumnHeader(line)) {
-    li.className = "ocr-line--colhead";
-    li.innerHTML =
-      '<span class="ocr-col-time">출발</span><span class="ocr-col-dest">종착지</span>';
-    return li;
-  }
-
-  const row = useTableLayout ? parseTimetableRowParts(line) : null;
-  const busMins = parseMinutesFromLine(line);
-  if (row) {
-    li.className = "ocr-line--time-row";
-    const timeSpan = document.createElement("span");
-    timeSpan.className = "ocr-time";
-    timeSpan.textContent = row.timeDisplay;
-    li.append(timeSpan);
-    const destSpan = document.createElement("span");
-    destSpan.className = row.destination ? "ocr-dest" : "ocr-dest ocr-dest--empty";
-    destSpan.textContent = row.destination || "—";
-    li.append(destSpan);
-  } else {
-    li.className = lineDisplayClass(line);
-    li.textContent = line;
-  }
-
-  if (busMins != null) li.dataset.busMinutes = String(busMins);
-  return li;
-}
-
-function getStopSections(stop) {
-  const photo = getActivePhoto(stop);
-  const built = photo?.ocrText?.trim()
-    ? buildSectionsFromOcr(photo.ocrText)
-    : photo?.sections?.length
-      ? photo.sections
-      : stop.ocrText?.trim()
-        ? buildSectionsFromOcr(stop.ocrText)
-        : stop.sections?.length
-          ? stop.sections
-          : [];
-  return stripPrivacyFromSections(normalizeSectionsForDisplay(built));
-}
-
-/** @param {string} line */
-function parseMinutesFromLine(line) {
-  const compact = line.replace(/\s/g, "");
-  if (/^\d{4}$/.test(compact)) {
-    const h = Number(compact.slice(0, 2));
-    const m = Number(compact.slice(2, 4));
-    if (h < 24 && m < 60) return h * 60 + m;
-  }
-  const match = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
-  if (!match) return null;
-  let h = Number(match[1]);
-  const m = Number(match[2]);
-  if (h >= 24 || m >= 60) return null;
-  h = infer24hFromParenContext(line, h);
-  if (h >= 24 || m >= 60) return null;
-  return h * 60 + m;
-}
-
-function isRouteHeaderLine(line) {
-  return (
-    /^\d{1,4}\s*번/.test(line) ||
-    /^노선\s*\d/.test(line) ||
-    lineDisplayClass(line) === "ocr-line--route"
-  );
-}
-
-/**
- * 한 블록 안에서 「123번」 같은 줄이 있으면 노선별로 나눔.
- * @param {string[]} lines
- */
-function splitLinesIntoRouteGroups(lines) {
-  /** @type {{ label: string | null, lines: string[] }[]} */
-  const groups = [];
-  let current = { label: null, lines: [] };
-
-  const flush = () => {
-    if (current.lines.length || current.label) groups.push({ ...current });
-    current = { label: null, lines: [] };
-  };
-
-  for (const line of lines) {
-    if (isRouteHeaderLine(line)) {
-      if (current.label || current.lines.length) flush();
-      current.label = line.trim();
-      continue;
-    }
-    current.lines.push(line);
-  }
-  flush();
-
-  const withTimes = groups.filter((g) =>
-    g.lines.some((line) => parseMinutesFromLine(line) != null)
-  );
-  if (!withTimes.length) return [{ label: null, lines }];
-  return withTimes;
-}
-
-/**
- * @param {{ minutes: number, line: string }[]} entries
- * @param {number} nowMins
- */
-function pickNextBusEntry(entries, nowMins) {
-  if (!entries.length) return null;
-  const sorted = [...entries].sort((a, b) => a.minutes - b.minutes);
-  let pick = sorted.find((e) => e.minutes >= nowMins);
-  let isTomorrow = false;
-  if (!pick) {
-    pick = sorted[0];
-    isTomorrow = true;
-  }
-  let diffMins = pick.minutes - nowMins;
-  if (isTomorrow) diffMins = 24 * 60 - nowMins + pick.minutes;
-  return { ...pick, isTomorrow, diffMins };
-}
-
-/** @param {string[]} lines @param {Date} [now] */
-function findNextBusInLines(lines, now = new Date()) {
-  const entries = [];
-  for (const line of lines) {
-    const minutes = parseMinutesFromLine(line);
-    if (minutes != null) entries.push({ minutes, line: line.trim() });
-  }
-  if (!entries.length) return null;
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  return pickNextBusEntry(entries, nowMins);
-}
-
-/**
- * 방면·노선 블록마다 가장 가까운 시각을 계산한다.
- * @param {{ title?: string | null, lines: string[] }[]} sections
- */
-function computeNextBusByGroup(sections, now = new Date()) {
-  /** @type {{ blockIndex: number, groupIndex: number, minutes: number, line: string, isTomorrow: boolean, diffMins: number, blockTitle: string | null, routeLabel: string | null }[]} */
-  const picks = [];
-
-  sections.forEach((block, blockIndex) => {
-    if (!isDirectionBlockTitle(block.title)) return;
-    const groups = splitLinesIntoRouteGroups(block.lines || []);
-    groups.forEach((group, groupIndex) => {
-      const next = findNextBusInLines(group.lines, now);
-      if (!next) return;
-      picks.push({
-        blockIndex,
-        groupIndex,
-        blockTitle: block.title?.trim() || null,
-        routeLabel: group.label,
-        ...next,
-      });
-    });
-  });
-
-  return picks;
-}
-
-function formatNextBusBadge(pick) {
-  const label = "지금 기준 다음 출발버스";
-  if (pick.isTomorrow) return `${label} · 내일 첫 차`;
-  if (pick.diffMins <= 0) return `${label} · 곧 출발`;
-  if (pick.diffMins < 60) return `${label} · 약 ${pick.diffMins}분 후`;
-  const h = Math.floor(pick.diffMins / 60);
-  const m = pick.diffMins % 60;
-  if (m === 0) return `${label} · 약 ${h}시간 후`;
-  return `${label} · 약 ${h}시간 ${m}분 후`;
-}
-
-function clearNextBusHighlights() {
-  document.querySelectorAll(".ocr-line--next").forEach((el) => {
-    el.classList.remove("ocr-line--next");
-    el.querySelector(".ocr-line-next-badge")?.remove();
-  });
-}
-
-function applyNextBusHighlights(picks) {
-  clearNextBusHighlights();
-  if (!picks.length) return;
-
-  for (const pick of picks) {
-    const selector =
-      `li[data-block-index="${pick.blockIndex}"]` +
-      `[data-group-index="${pick.groupIndex}"]` +
-      `[data-bus-minutes="${pick.minutes}"]`;
-    document.querySelectorAll(selector).forEach((el) => {
-      el.classList.add("ocr-line--next");
-      if (el.querySelector(".ocr-line-next-badge")) return;
-      const badge = document.createElement("span");
-      badge.className = "ocr-line-next-badge";
-      badge.textContent = formatNextBusBadge(pick);
-      el.append(badge);
-    });
-  }
-}
-
-function refreshActiveStopNextBus() {
-  const detail = document.querySelector("#view-detail");
-  if (!activeStopId || !detail || detail.hidden) return;
-  const stop = busStops.find((s) => s.id === activeStopId);
-  if (!stop) return;
-
-  const sections = getStopSections(stop);
-  const picks = computeNextBusByGroup(sections, new Date());
-  applyNextBusHighlights(picks);
-}
 
 function renderStopDetail(stopId) {
   const stop = busStops.find((s) => s.id === stopId);
@@ -1871,120 +1293,6 @@ function formatStopDate(iso) {
   }
 }
 
-function lineLooksLikeTimeValue(line) {
-  return countTimeTokens(line) >= 1;
-}
-
-/** AI JSON (등록 시) — 구조 해석은 모델이, 앱은 렌더만 */
-function parseAiTimetableJson(text) {
-  let raw = text.trim();
-  const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
-  if (fenced) raw = fenced[1].trim();
-  if (!raw.startsWith("{")) return null;
-
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (!data || !Array.isArray(data.sections) || !data.sections.length) {
-    return null;
-  }
-
-  /** @type {{ title: string | null, lines: string[] }[]} */
-  const sections = [];
-  if (data.placard && String(data.placard).trim()) {
-    sections.push({
-      title: cleanMarkdownHeading(String(data.placard)),
-      lines: [],
-    });
-  }
-
-  for (const sec of data.sections) {
-    const title =
-      sec.title != null && String(sec.title).trim()
-        ? cleanMarkdownHeading(String(sec.title))
-        : null;
-    const lines = (sec.lines || [])
-      .map((l) => String(l).replace(/\s+/g, " ").trim())
-      .filter(Boolean)
-      .filter((l) => !isContactMetaLine(l))
-      .map((l) =>
-        lineLooksLikeTimeValue(l) ? normalizeScheduleRow(l) : l
-      );
-    if (title || lines.length) sections.push({ title, lines });
-  }
-
-  const hasTimes = sections.some((s) =>
-    (s.lines || []).some((l) => countTimeTokens(l) >= 1)
-  );
-  if (!hasTimes) return null;
-  return stripPrivacyFromSections(sections);
-}
-
-function infer24hFromParenContext(line, hour) {
-  const paren = line.match(/[\(\（]\s*(\d{1,2})\s*[:：.．]\s*(\d{2})\s*[\)\）]/);
-  if (!paren || hour >= 13) return hour;
-  const ampH = Number(paren[1]);
-  const times = [...line.matchAll(/(\d{1,2})\s*[:：.．]\s*(\d{2})/g)];
-  if (times.length < 2) return hour;
-  const peerH = Number(times[1][1]);
-  if (peerH >= 13 && hour <= 11 && ampH >= 1 && ampH <= 12) {
-    return ampH === 12 ? 12 : ampH + 12;
-  }
-  return hour;
-}
-
-/** 출발|종착 행 — 종착지 유지 */
-function normalizeScheduleRow(line) {
-  const m = line.match(/(\d{1,2})\s*[:：.．]\s*(\d{2})/);
-  if (!m) return line.trim();
-  let h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h >= 24 || min >= 60) return line.trim();
-  h = infer24hFromParenContext(line, h);
-  const time = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-  let rest = line.slice((m.index ?? 0) + m[0].length);
-  rest = rest.replace(/^\s*[\|｜]\s*/, "").trim();
-  if (lineHasPairedBusTimes(line)) {
-    rest = rest
-      .replace(/[\(\（][^)\）]*[\)\）]?/, "")
-      .replace(/^[\)\）\s]+/, "")
-      .trim();
-  }
-  return rest ? `${time} ${rest}` : time;
-}
-
-/** 표 재구성 없음 — 읽은 줄 순서 그대로 한 덩어리 (구형 JSON만 예외) */
-function buildSectionsFromOcr(text) {
-  const trimmed = text?.trim();
-  if (!trimmed) return [];
-
-  const fromJson = parseAiTimetableJson(trimmed);
-  if (fromJson?.length) return fromJson;
-
-  const rawLines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .filter((l) => !isContactMetaLine(l));
-
-  return sectionsFromTranscriptLines(rawLines);
-}
-
-function isLikelySectionTitle(line) {
-  if (line.length > 28) return false;
-  if (isDirectionHeadingLine(line)) return true;
-  const keywords =
-    /(평일|주말|토요|일요|공휴|비번|노선|방향|출발|도착|행|회차|첫차|막차|심야|시내|읍내|마을|시간표|배차|운행|요일|격일|순환)/;
-  if (keywords.test(line)) return true;
-  if (/^\d{1,4}\s*번$/.test(line)) return true;
-  if (/^노선\s*\d+/.test(line)) return true;
-  if (/^[▶►\-–=]/.test(line) && line.length <= 20) return true;
-  return false;
-}
 
 /**
  * 저장용 사진: 크기 맞춤 + 대비·선명 보정 (OCR 없음)
@@ -2041,13 +1349,11 @@ async function compressImageFile(file, maxWidth, progress) {
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(loaded.source, 0, 0, w, h);
   if (loaded.kind === "bitmap" && loaded.source.close) loaded.source.close();
-  if (REGISTER_PHOTO_ONLY) {
-    progress?.("enhance");
-    try {
-      await autoOptimizePhotoOnCanvas(ctx, w, h);
-    } catch (error) {
-      console.warn("photo enhance skipped", error);
-    }
+  progress?.("enhance");
+  try {
+    await autoOptimizePhotoOnCanvas(ctx, w, h);
+  } catch (error) {
+    console.warn("photo enhance skipped", error);
   }
   progress?.("encode");
   await yieldToUi();
@@ -2128,159 +1434,6 @@ async function sharpenRgbInPlaceAsync(pixels, width, height, strength) {
   }
 }
 
-async function loadTesseract() {
-  if (window.Tesseract) return window.Tesseract;
-  await new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = TESSERACT_CDN;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("tesseract load"));
-    document.head.appendChild(script);
-  });
-  return window.Tesseract;
-}
-
-/**
- * @returns {Promise<{ text: string, confidence: number }>}
- */
-async function recognizeTextFromImage(blob) {
-  const Tesseract = await loadTesseract();
-  const result = await Tesseract.recognize(blob, "kor+eng", {
-    logger: (message) => {
-      if (message.status === "recognizing text" && typeof message.progress === "number") {
-        setOcrProgress(true, message.progress);
-      }
-    },
-  });
-  const text = result.data.text || "";
-  const confidence =
-    typeof result.data.confidence === "number" ? result.data.confidence : estimateOcrConfidence(text);
-  return { text, confidence };
-}
-
-function estimateOcrConfidence(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  const hangul = (trimmed.match(/[가-힣]/g) || []).length;
-  const digits = (trimmed.match(/\d/g) || []).length;
-  const score = Math.min(100, hangul * 2 + digits + trimmed.length * 0.2);
-  return score;
-}
-
-/** 등록 시 표 구조를 맞추려면 이미지 기반 정밀 읽기를 우선한다. */
-function shouldUseAiRefineOnRegister() {
-  if (!getAiSettings().auto) return false;
-  return navigator.onLine;
-}
-
-function isOcrLowQuality(text) {
-  const trimmed = text.trim();
-  if (isOcrUnreadable(trimmed)) return true;
-  return scoreOcrQuality(trimmed).low;
-}
-
-function scoreOcrQuality(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (!lines.length) return { low: true, goodLines: 0, ratio: 0 };
-
-  let goodLines = 0;
-  let noisyLines = 0;
-  for (const line of lines) {
-    if (isCredibleTimetableLine(line)) goodLines++;
-    if (isNoisyOcrLine(line)) noisyLines++;
-  }
-  const ratio = goodLines / lines.length;
-  const low =
-    ratio < 0.35 || (noisyLines >= Math.ceil(lines.length * 0.45) && goodLines < 2);
-  return { low, goodLines, ratio, noisyLines, lineCount: lines.length };
-}
-
-function isCredibleTimetableLine(line) {
-  if (/[가-힣]{2,}/.test(line) &&
-    /(평일|주말|토|일|공휴|버스|노선|방향|행|출발|도착|정류|마을|읍|면|리|시간)/.test(line)) {
-    return true;
-  }
-  if (/^\d{1,4}\s*번/.test(line) || /^노선\s*\d/.test(line)) return true;
-
-  const times = [...line.matchAll(/(\d{1,2})\s*[:：.．]\s*(\d{2})/g)];
-  const validTimes = times.filter((m) => {
-    const h = Number(m[1]);
-    const min = Number(m[2]);
-    return h >= 0 && h <= 23 && min >= 0 && min <= 59;
-  });
-  if (validTimes.length >= 1 && validTimes.length === times.length) {
-    const hangul = (line.match(/[가-힣]/g) || []).length;
-    const noise = (line.match(/[|=\[\]{}\\/`"']/g) || []).length;
-    if (noise <= 4 || hangul >= 1 || validTimes.length >= 2) return true;
-  }
-  return false;
-}
-
-function isNoisyOcrLine(line) {
-  if (line.length <= 1) return true;
-  const noise = (line.match(/[|=\[\]{}\\/`"'<>]/g) || []).length;
-  const latin = (line.match(/[a-zA-Z]/g) || []).length;
-  const hangul = (line.match(/[가-힣]/g) || []).length;
-  if (isCredibleTimetableLine(line)) return false;
-  if (noise >= 3) return true;
-  if (latin >= 3 && hangul === 0) return true;
-  if (/=/.test(line) && hangul <= 1) return true;
-  return false;
-}
-
-function isOcrUnreadable(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return true;
-  if (!/[가-힣a-zA-Z0-9]/.test(trimmed)) return true;
-  if (trimmed.length < 4) return true;
-
-  const hasHangul = /[가-힣]/.test(trimmed);
-  const hasDigit = /\d/.test(trimmed);
-  const hasTimeLike = /\d{1,2}\s*[:：.．\s]\s*\d{2}|\d{4}/.test(trimmed);
-  return !hasHangul && !hasDigit && !hasTimeLike;
-}
-
-/**
- * @param {string} dataUrl
- * @returns {Promise<{ text: string } | null>}
- */
-async function refineTimetableWithAi(dataUrl) {
-  const { endpoint } = getAiSettings();
-  const url = endpoint.startsWith("http")
-    ? endpoint
-    : new URL(endpoint, window.location.origin).href;
-
-  setOcrProgress(true, 0.35);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: dataUrl }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setBusStatus("처리하지 못했습니다. 사진만 이용해 주세요.");
-      return null;
-    }
-    if (typeof payload.text === "string" && payload.text.trim()) {
-      return { text: payload.text };
-    }
-    setBusStatus("처리하지 못했습니다. 사진만 다시 등록해 주세요.");
-    return null;
-  } catch (error) {
-    console.error(error);
-    setBusStatus(
-      "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
-    );
-    return null;
-  } finally {
-    setOcrProgress(false);
-  }
-}
 
 async function loadConfig() {
   try {

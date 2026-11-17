@@ -11,7 +11,7 @@ let popupCurrentRequest = null;
 let sharePopupBound = false;
 let shareHintBound = false;
 
-const SHARE_POLL_MS = 12_000;
+const SHARE_POLL_MS = 5_000;
 /** @type {number | null} */
 let sharePollTimer = null;
 let modalScrollLockY = 0;
@@ -139,6 +139,23 @@ function normalizeEmail(email) {
     raw = `${raw}@gmail.com`;
   }
   return canonicalGmailAddress(raw);
+}
+
+/** DB에 옛 주소 형식이 있어도 조회되게 */
+function shareEmailLookupKeys(userEmail) {
+  const canon = normalizeEmail(userEmail);
+  const raw = String(userEmail || "")
+    .trim()
+    .toLowerCase();
+  const keys = new Set([canon]);
+  if (raw.includes("@")) keys.add(raw);
+  if (raw && !raw.includes("@")) keys.add(`${raw}@gmail.com`);
+  return [...keys];
+}
+
+function isIncomingShareForUser(row, userEmail) {
+  const keys = new Set(shareEmailLookupKeys(userEmail));
+  return keys.has(normalizeEmail(row.to_email));
 }
 
 function apiBase() {
@@ -326,6 +343,9 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   if (!row) {
     row = pendingRows.find((r) => !dismissed.has(String(r.id))) || null;
   }
+  if (!row && pendingRows.length) {
+    row = pendingRows[0];
+  }
   if (!row) return;
   if (dialog.open && popupCurrentRequest?.id === row.id) return;
 
@@ -442,18 +462,28 @@ export async function refreshIncomingShareRequests(
     return;
   }
 
-  const { data, error } = await client
+  const lookup = shareEmailLookupKeys(userEmail);
+  const { data: rawRows, error } = await client
     .from("bus_share_requests")
-    .select("id, from_email, created_at")
+    .select("id, from_email, to_email, created_at")
     .eq("status", "pending")
-    .eq("to_email", email)
+    .in("to_email", lookup)
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error(error);
-    setStatus?.("공유 요청을 불러오지 못했습니다.");
+    const msg = String(error.message || error.code || "");
+    if (msg.includes("bus_canonical_gmail") || error.code === "42883") {
+      setStatus?.(
+        "Supabase에서 bus-share-gmail-rls-patch.sql 을 Run 해 주세요. (Gmail 주소 맞춤)"
+      );
+    } else {
+      setStatus?.("공유 요청을 불러오지 못했습니다.");
+    }
     return;
   }
+
+  const data = (rawRows || []).filter((row) => isIncomingShareForUser(row, userEmail));
 
   if (listEl) {
     listEl.replaceChildren();
@@ -544,6 +574,8 @@ export function initBusShareUi(client, session, setStatus) {
 
   root.hidden = false;
   bindBusShareModalScrollLock();
+  const teaser = document.querySelector("#cloud-sync-teaser");
+  if (teaser) teaser.open = true;
 
   if (!shareUiBound) {
     shareUiBound = true;
@@ -590,6 +622,13 @@ export function initBusShareUi(client, session, setStatus) {
       });
     }
   }
+
+  void refreshIncomingShareRequests(
+    client,
+    session.user.email || "",
+    incomingEl,
+    setStatus
+  );
 
   const params = new URLSearchParams(window.location.search);
   if (params.get("share") === "pending" && incomingEl) {

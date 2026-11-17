@@ -70,10 +70,18 @@ Supabase **Project URL** 은 이미 있다고 가정합니다.
 
 ---
 
+## 구글 화면에 `supabase.co(으)로 이동` 이 보일 때
+
+앱 코드로는 바뀌지 않습니다. **Google Cloud 브랜딩**(앱 이름 `내버스시간표`) 또는 Supabase 커스텀 도메인(유료)으로 고칩니다.  
+자세한 단계: **`메뉴얼-구글로그인-화면이름.md`** · 개인정보 URL: `https://bus.uxpwa.com/privacy.html`
+
+---
+
 ## 자주 하는 실수
 
 | 증상 | 확인 |
 |------|------|
+| 로그인 화면에 supabase 주소만 보임 | `메뉴얼-구글로그인-화면이름.md` 브랜딩 
 | redirect_uri_mismatch | Google redirect URI = `https://[ID].supabase.co/auth/v1/callback` |
 | 앱으로 안 돌아옴 | Supabase Redirect URLs에 `https://bus.uxpwa.com/**` |
 | 액세스 차단 (테스트) | OAuth consent screen **테스트 사용자**에 Gmail 추가 |

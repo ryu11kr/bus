@@ -154,6 +154,10 @@ async function hydrateRemoteStops(client, cloudStops) {
   return out;
 }
 
+function filterValidStops(stops) {
+  return (stops || []).filter((s) => s?.name && getStopPhotos(s).length);
+}
+
 /**
  * @param {Record<string, unknown>[]} localStops
  * @param {Record<string, unknown>[]} remoteStops
@@ -173,7 +177,72 @@ export function mergeStopsByUpdatedAt(localStops, remoteStops) {
     }
     byId.set(id, mergeStopRecord(local, remote));
   }
-  return Array.from(byId.values()).filter((s) => s.name && getStopPhotos(s).length);
+  return filterValidStops(Array.from(byId.values()));
+}
+
+/**
+ * 목록 단위 시각(stateUpdatedAt)으로 어느 쪽 정류장 목록이 맞는지 정함 (삭제 동기화).
+ * @param {Record<string, unknown>[]} localStops
+ * @param {Record<string, unknown>[]} remoteStops
+ * @param {{ localListAt: number, remoteListAt: number }} listTimes
+ */
+export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
+  const localListAt = listTimes.localListAt || 0;
+  const remoteListAt = listTimes.remoteListAt || 0;
+  const local = localStops || [];
+  const remote = remoteStops || [];
+
+  /** @type {Map<string, Record<string, unknown>>} */
+  const byId = new Map();
+
+  if (remoteListAt > localListAt) {
+    for (const r of remote) {
+      if (!r?.id) continue;
+      const id = String(r.id);
+      const loc = local.find((s) => String(s.id) === id);
+      byId.set(id, loc ? mergeStopRecord(loc, r) : r);
+    }
+    return {
+      stops: filterValidStops(Array.from(byId.values())),
+      stateUpdatedAt: new Date(remoteListAt).toISOString(),
+    };
+  }
+
+  if (localListAt > remoteListAt) {
+    for (const s of local) {
+      if (s?.id) byId.set(String(s.id), s);
+    }
+    for (const r of remote) {
+      if (!r?.id) continue;
+      const id = String(r.id);
+      const prev = byId.get(id);
+      if (!prev) {
+        const rAt = new Date(String(r.updatedAt || 0)).getTime();
+        if (rAt > localListAt) byId.set(id, r);
+        continue;
+      }
+      byId.set(id, mergeStopRecord(prev, r));
+    }
+    return {
+      stops: filterValidStops(Array.from(byId.values())),
+      stateUpdatedAt: new Date(localListAt).toISOString(),
+    };
+  }
+
+  return {
+    stops: mergeStopsByUpdatedAt(local, remote),
+    stateUpdatedAt: new Date(Math.max(localListAt, remoteListAt) || Date.now()).toISOString(),
+  };
+}
+
+function localListRevisionMs(localState, localStops) {
+  if (localState?.stateUpdatedAt) {
+    return new Date(String(localState.stateUpdatedAt)).getTime();
+  }
+  return (localStops || []).reduce(
+    (max, s) => Math.max(max, new Date(s?.updatedAt || 0).getTime()),
+    0
+  );
 }
 
 export async function pullAndMergeCloudState(client, userId) {
@@ -197,7 +266,12 @@ export async function pullAndMergeCloudState(client, userId) {
   }
 
   const hydrated = await hydrateRemoteStops(client, data.stops);
-  const merged = mergeStopsByUpdatedAt(localStops, hydrated);
+  const remoteListAt = new Date(data.updated_at || 0).getTime();
+  const localListAt = localListRevisionMs(localState, localStops);
+  let { stops: merged, stateUpdatedAt } = mergeStopsWithListRevision(localStops, hydrated, {
+    localListAt,
+    remoteListAt,
+  });
   if (merged.length > CLOUD_MAX_STOPS) {
     merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     merged.length = CLOUD_MAX_STOPS;
@@ -205,17 +279,12 @@ export async function pullAndMergeCloudState(client, userId) {
 
   window.__busCloudSyncApplying = true;
   try {
-    applyLocal(merged);
+    applyLocal(merged, { stateUpdatedAt });
   } finally {
     window.__busCloudSyncApplying = false;
   }
 
-  const remoteUpdated = new Date(data.updated_at || 0).getTime();
-  const localMax = localStops.reduce(
-    (max, s) => Math.max(max, new Date(s.updatedAt || 0).getTime()),
-    0
-  );
-  if (localMax > remoteUpdated) scheduleCloudPush(client, userId, 400);
+  if (localListAt > remoteListAt) scheduleCloudPush(client, userId, 400);
 }
 
 export async function pushLocalStateToCloud(client, userId) {
@@ -224,12 +293,17 @@ export async function pushLocalStateToCloud(client, userId) {
 
   const localState = getLocal();
   let stops = Array.isArray(localState.stops) ? [...localState.stops] : [];
+  const stateUpdatedAt =
+    typeof localState.stateUpdatedAt === "string" && localState.stateUpdatedAt
+      ? localState.stateUpdatedAt
+      : new Date().toISOString();
+
   if (!stops.length) {
     await client.from("bus_user_data").upsert({
       user_id: userId,
       stops: [],
       schema_version: 3,
-      updated_at: new Date().toISOString(),
+      updated_at: stateUpdatedAt,
     });
     setSyncStatus("클라우드와 맞춤 (저장된 정류장 없음)");
     return;
@@ -282,16 +356,11 @@ export async function pushLocalStateToCloud(client, userId) {
     });
   }
 
-  const updatedAt = cloudStops.reduce(
-    (max, s) => Math.max(max, new Date(String(s.updatedAt)).getTime()),
-    0
-  );
-
   const { error } = await client.from("bus_user_data").upsert({
     user_id: userId,
     stops: cloudStops,
     schema_version: 3,
-    updated_at: new Date(updatedAt || Date.now()).toISOString(),
+    updated_at: stateUpdatedAt,
   });
   if (error) throw error;
   setSyncStatus("클라우드에 저장했습니다.");

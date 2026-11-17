@@ -842,7 +842,11 @@ function migrateLegacyBusStorage() {
 
 function saveBusState() {
   try {
-    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 3, stops: busStops }));
+    const stateUpdatedAt = new Date().toISOString();
+    localStorage.setItem(
+      BUS_STORAGE_KEY,
+      JSON.stringify({ version: 3, stops: busStops, stateUpdatedAt })
+    );
     if (!window.__busCloudSyncApplying) {
       window.dispatchEvent(new CustomEvent("bus-local-state-saved"));
     }
@@ -2387,11 +2391,18 @@ window.busAppGetLocalStopState = function busAppGetLocalStopState() {
   }
 };
 
-window.busAppApplyCloudStops = function busAppApplyCloudStops(stops) {
+window.busAppApplyCloudStops = function busAppApplyCloudStops(stops, meta) {
   busStops = normalizeBusStopsFromCloud(stops);
+  const stateUpdatedAt =
+    typeof meta?.stateUpdatedAt === "string" && meta.stateUpdatedAt
+      ? meta.stateUpdatedAt
+      : new Date().toISOString();
   window.__busCloudSyncApplying = true;
   try {
-    localStorage.setItem(BUS_STORAGE_KEY, JSON.stringify({ version: 3, stops: busStops }));
+    localStorage.setItem(
+      BUS_STORAGE_KEY,
+      JSON.stringify({ version: 3, stops: busStops, stateUpdatedAt })
+    );
   } catch (error) {
     console.error(error);
     setBusStatus(

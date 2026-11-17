@@ -88,11 +88,11 @@ function New-BusClockIcon {
   $whiteBrush = New-Object System.Drawing.SolidBrush $white
   $bgBrush = New-Object System.Drawing.SolidBrush $bg
 
-  # —— 버스 정면 (아이콘 대부분) ——
-  $busW = [int]($inner * 0.92)
-  $busH = [int]($inner * 0.72)
+  # —— 버스 정면 (세로로 길게, 폭은 좁게) ——
+  $busW = [int]($inner * 0.76)
+  $busH = [int]($inner * 0.78)
   $bx = $pad + [int](($inner - $busW) / 2)
-  $by = $pad + [int]($inner * 0.24)
+  $by = $pad + [int]($inner * 0.2)
   $busRad = [Math]::Max(12, [int]($Size / 18))
 
   $bodyPath = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -101,10 +101,10 @@ function New-BusClockIcon {
   $g.FillPath($whiteBrush, $bodyPath)
 
   # 앞 유리
-  $glassW = [int]($busW * 0.82)
-  $glassH = [int]($busH * 0.38)
+  $glassW = [int]($busW * 0.8)
+  $glassH = [int]($busH * 0.34)
   $gx = $bx + [int](($busW - $glassW) / 2)
-  $gy = $by + [int]($busH * 0.14)
+  $gy = $by + [int]($busH * 0.24)
   $glassRad = [Math]::Max(8, [int]($Size / 40))
   $glassPath = New-Object System.Drawing.Drawing2D.GraphicsPath
   $glassR = New-Object System.Drawing.Rectangle $gx, $gy, $glassW, $glassH
@@ -142,9 +142,9 @@ function New-BusClockIcon {
   $g.DrawLine($bumperPen, $bx + [int]($busW * 0.08), $bumY, $bx + $busW - [int]($busW * 0.08), $bumY)
 
   # —— 작은 시계: 천장 우측에 겹침 (버스 뒤에 그리지 않고 위에) ——
-  $clockD = [int]($inner * 0.3)
-  $clockCx = $bx + $busW - [int]($clockD * 0.42)
-  $clockCy = $by + [int]($clockD * 0.38)
+  $clockD = [int]($inner * 0.36)
+  $clockCx = $bx + $busW - [int]($clockD * 0.4)
+  $clockCy = $by + [int]($clockD * 0.34)
   Draw-SmallClock -G $g -Cx $clockCx -Cy $clockCy -D $clockD -Bg $bg -Face $white
 
   $g.Dispose()

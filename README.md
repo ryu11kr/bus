@@ -12,6 +12,14 @@
 
 Vercel 등 정적 호스트에 `bus` 폴더를 루트로 배포하면 됩니다. (`bus.uxpwa.com` 등)
 
+공식 URL: **https://bus.uxpwa.com**
+
+검색·AI 노출: **`메뉴얼-검색-AI노출.md`** (메타, Search Console, 사이트맵)
+
+공식 URL: **https://bus.uxpwa.com**
+
+검색·AI 노출: **`메뉴얼-검색-AI노출.md`** (메타, Search Console, 사이트맵)
+
 ## GitHub
 
 `create-github-repo.cmd` → `deploy-github.cmd`

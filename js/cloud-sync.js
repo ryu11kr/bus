@@ -371,10 +371,19 @@ async function initGoogleAuthUi(client, cfg) {
   window.addEventListener("pageshow", () => {
     refreshSessionFromStorage().catch(() => {});
   });
+  let lastForegroundSync = 0;
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      refreshSessionFromStorage().catch(() => {});
-    }
+    if (document.visibilityState !== "visible") return;
+    refreshSessionFromStorage().catch(() => {});
+    if (!cfg.enabled) return;
+    const now = Date.now();
+    if (now - lastForegroundSync < 2500) return;
+    lastForegroundSync = now;
+    client.auth.getSession().then(({ data: sessionData }) => {
+      const userId = sessionData.session?.user?.id;
+      if (!userId) return;
+      runFullCloudSync(client, userId).catch((error) => console.error(error));
+    });
   });
 }
 

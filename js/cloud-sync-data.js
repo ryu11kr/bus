@@ -196,7 +196,7 @@ export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
   /** @type {Map<string, Record<string, unknown>>} */
   const byId = new Map();
 
-  if (remoteListAt > localListAt) {
+  if (remoteListAt >= localListAt) {
     for (const r of remote) {
       if (!r?.id) continue;
       const id = String(r.id);
@@ -205,7 +205,7 @@ export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
     }
     return {
       stops: filterValidStops(Array.from(byId.values())),
-      stateUpdatedAt: new Date(remoteListAt).toISOString(),
+      stateUpdatedAt: new Date(Math.max(remoteListAt, localListAt) || Date.now()).toISOString(),
     };
   }
 
@@ -230,10 +230,7 @@ export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
     };
   }
 
-  return {
-    stops: mergeStopsByUpdatedAt(local, remote),
-    stateUpdatedAt: new Date(Math.max(localListAt, remoteListAt) || Date.now()).toISOString(),
-  };
+  return { stops: filterValidStops([]), stateUpdatedAt: new Date().toISOString() };
 }
 
 function localListRevisionMs(localState, localStops) {
@@ -260,15 +257,33 @@ export async function pullAndMergeCloudState(client, userId) {
 
   const localState = getLocal();
   const localStops = Array.isArray(localState.stops) ? localState.stops : [];
+  const localListAt = localListRevisionMs(localState, localStops);
 
-  if (!data?.stops || !Array.isArray(data.stops) || !data.stops.length) {
+  if (!data) {
     if (localStops.length) scheduleCloudPush(client, userId, 400);
     return;
   }
 
-  const hydrated = await hydrateRemoteStops(client, data.stops);
   const remoteListAt = new Date(data.updated_at || 0).getTime();
-  const localListAt = localListRevisionMs(localState, localStops);
+  const remoteStopsRaw = Array.isArray(data.stops) ? data.stops : [];
+
+  if (!remoteStopsRaw.length) {
+    if (remoteListAt >= localListAt) {
+      window.__busCloudSyncApplying = true;
+      try {
+        applyLocal([], {
+          stateUpdatedAt: new Date(remoteListAt || Date.now()).toISOString(),
+        });
+      } finally {
+        window.__busCloudSyncApplying = false;
+      }
+      return;
+    }
+    if (localStops.length) scheduleCloudPush(client, userId, 400);
+    return;
+  }
+
+  const hydrated = await hydrateRemoteStops(client, remoteStopsRaw);
   let { stops: merged, stateUpdatedAt } = mergeStopsWithListRevision(localStops, hydrated, {
     localListAt,
     remoteListAt,

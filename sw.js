@@ -101,14 +101,25 @@ self.addEventListener("push", (event) => {
   const tag = data.requestId ? `bus-share-${data.requestId}` : "bus-share";
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "./icons/icon-192.png",
-      badge: "./icons/icon-192.png",
-      tag,
-      data: { url },
-      renotify: true,
-    })
+    (async () => {
+      await self.registration.showNotification(title, {
+        body,
+        icon: "./icons/icon-192.png",
+        badge: "./icons/icon-192.png",
+        tag,
+        data: { url },
+        renotify: true,
+      });
+      const requestId = typeof data.requestId === "string" ? data.requestId : "";
+      const windowClients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const win of windowClients) {
+        if (!win.url.startsWith(self.location.origin)) continue;
+        win.postMessage({ type: "BUS_SHARE_INCOMING", requestId });
+      }
+    })()
   );
 });
 

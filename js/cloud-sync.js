@@ -7,8 +7,11 @@ import {
   setCloudSyncStatusCallback,
 } from "./cloud-sync-data.js";
 import {
+  bindIncomingShareLiveUpdates,
   initBusShareUi,
   refreshIncomingShareRequests,
+  startIncomingSharePolling,
+  stopIncomingSharePolling,
   syncPushEnableButton,
 } from "./cloud-share.js";
 
@@ -313,8 +316,11 @@ async function initGoogleAuthUi(client, cfg) {
         document.querySelector("#bus-share-incoming"),
         setShareStatus
       );
+      startIncomingSharePolling(client, setShareStatus);
+      bindIncomingShareLiveUpdates(client, setShareStatus);
       if (ticket !== renderSerial) return;
     } else {
+      stopIncomingSharePolling();
       const sharePanel = document.querySelector("#bus-share-panel");
       const incomingEl = document.querySelector("#bus-share-incoming");
       if (sharePanel) sharePanel.hidden = true;

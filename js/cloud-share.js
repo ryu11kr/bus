@@ -12,6 +12,72 @@ let popupCurrentRequest = null;
 let sharePopupBound = false;
 let shareHintBound = false;
 
+const SHARE_POLL_MS = 12_000;
+/** @type {number | null} */
+let sharePollTimer = null;
+let shareLiveUpdatesBound = false;
+
+export function stopIncomingSharePolling() {
+  if (sharePollTimer != null) {
+    clearInterval(sharePollTimer);
+    sharePollTimer = null;
+  }
+}
+
+/**
+ * 앱을 켜 둔 상태에서도 공유 요청·팝업이 뜨도록 주기 조회
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {(text: string) => void} setStatus
+ */
+export function startIncomingSharePolling(client, setStatus) {
+  stopIncomingSharePolling();
+
+  const tick = async () => {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const { data } = await client.auth.getSession();
+      const email = normalizeEmail(data.session?.user?.email || "");
+      if (!email) return;
+      const incoming = document.querySelector("#bus-share-incoming");
+      await refreshIncomingShareRequests(client, email, incoming, setStatus);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  void tick();
+  sharePollTimer = window.setInterval(() => {
+    void tick();
+  }, SHARE_POLL_MS);
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {(text: string) => void} setStatus
+ */
+export function bindIncomingShareLiveUpdates(client, setStatus) {
+  if (shareLiveUpdatesBound || !navigator.serviceWorker) return;
+  shareLiveUpdatesBound = true;
+
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data = event.data || {};
+    if (data.type !== "BUS_SHARE_INCOMING") return;
+    void (async () => {
+      const { data: sess } = await client.auth.getSession();
+      const email = normalizeEmail(sess.session?.user?.email || "");
+      if (!email) return;
+      const incoming = document.querySelector("#bus-share-incoming");
+      await refreshIncomingShareRequests(
+        client,
+        email,
+        incoming,
+        setStatus,
+        typeof data.requestId === "string" ? data.requestId : null
+      );
+    })();
+  });
+}
+
 /**
  * @param {string} message
  */

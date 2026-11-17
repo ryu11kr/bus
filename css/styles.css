@@ -699,9 +699,23 @@ footer {
   min-height: 3.1rem;
   padding: 0.55rem 0.85rem;
   font-size: 1.15rem;
+  font-weight: 700;
   border: 2px solid #000;
   border-radius: 0.75rem;
   background: #fff;
+}
+
+.bus-share-email::placeholder {
+  color: #111;
+  font-size: 1.12rem;
+  font-weight: 800;
+  opacity: 1;
+}
+
+.bus-share-email::-webkit-input-placeholder {
+  color: #111;
+  font-weight: 800;
+  opacity: 1;
 }
 
 .bus-share-incoming {

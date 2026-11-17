@@ -56,11 +56,14 @@ function describeShareError(err) {
   if (code === "self_share") return "본인 이메일로는 보낼 수 없습니다.";
   if (code === "invalid_email") return "Gmail 형식을 확인해 주세요.";
   if (code === "login_required") return "다시 구글 로그인 후 시도해 주세요.";
-  if (code === "server_not_configured" || code === "insert_failed") {
-    return "Supabase SQL(bus-share-setup.sql) 실행과 Vercel SUPABASE_SERVICE_ROLE_KEY를 확인해 주세요.";
+  if (code === "server_not_configured") {
+    return "Vercel에 SUPABASE_SERVICE_ROLE_KEY를 넣고 Redeploy 해 주세요. (수락할 때 필요, 메뉴얼-정류장공유-Vercel넣기.md)";
   }
-  if (code === "PGRST205" || String(err?.message || "").includes("bus_share_requests")) {
-    return "Supabase SQL Editor에서 bus-share-setup.sql을 실행해 주세요.";
+  if (code === "insert_failed" || code === "PGRST205") {
+    return "Supabase SQL Editor에서 bus-share-setup.sql 전체를 Run 해 주세요.";
+  }
+  if (String(err?.message || "").includes("bus_share_requests")) {
+    return "Supabase SQL Editor에서 bus-share-setup.sql 전체를 Run 해 주세요.";
   }
   if (err?.message) return `공유 실패: ${err.message}`;
   return "공유를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.";

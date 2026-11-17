@@ -1223,15 +1223,12 @@ function renderStopDetail(stopId) {
       const nameBtn = document.createElement("button");
       nameBtn.type = "button";
       nameBtn.className = "detail-photo-label-btn";
-      const kicker = document.createElement("span");
-      kicker.className = "detail-photo-label-btn-kicker";
-      kicker.textContent = "시간표 이름 (눌러서 입력)";
       const value = document.createElement("span");
       value.className = "detail-photo-label-btn-value";
       const hasLabel = photoHasCustomLabel(p);
       value.textContent = hasLabel ? displayPhotoLabel(p, index) : "버스 번호·애칭 적기";
       if (!hasLabel) value.classList.add("is-placeholder");
-      nameBtn.append(kicker, value);
+      nameBtn.append(value);
       nameBtn.addEventListener("click", () => {
         pendingStopAction = "rename-photo-label";
         pendingPhotoLabelEditId = p.id;

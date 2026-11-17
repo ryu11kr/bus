@@ -625,7 +625,8 @@ footer {
   margin-top: 0.45rem;
 }
 
-.cloud-sync-teaser {
+.cloud-sync-teaser,
+.bus-share-teaser {
   margin-top: 0.35rem;
   padding-top: 0.65rem;
   border-top: 1px solid var(--line);
@@ -675,18 +676,9 @@ footer {
 }
 
 .bus-share-panel {
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px dashed var(--line);
+  margin-top: 0.65rem;
   display: grid;
   gap: 0.55rem;
-}
-
-.bus-share-heading {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 800;
-  text-align: center;
 }
 
 .bus-share-help {

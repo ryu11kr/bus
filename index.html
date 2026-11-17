@@ -159,20 +159,20 @@
                 로그아웃
               </button>
             </div>
-            <div id="bus-share-panel" class="bus-share-panel" hidden>
-              <h3 class="bus-share-heading">정류장 공유</h3>
-              <p class="bus-share-help">
-                받을 사람 <strong>구글 로그인 Gmail</strong>을 그대로 입력하세요. 상대가 그 계정으로 로그인하면
-                팝업이 뜹니다.
-              </p>
-              <label class="bus-share-field" for="bus-share-to-email">받을 사람 Gmail</label>
+          </details>
+
+          <details id="bus-share-teaser" class="home-more panel-lite bus-share-teaser" hidden>
+            <summary>정류장 공유</summary>
+            <div id="bus-share-panel" class="bus-share-panel">
+              <p class="bus-share-help">받을 사람 지메일 아이디만 입력하세요.</p>
+              <label class="bus-share-field" for="bus-share-to-email">받을 사람</label>
               <input
                 id="bus-share-to-email"
                 class="text-field-input bus-share-email"
-                type="email"
+                type="text"
                 inputmode="email"
-                autocomplete="email"
-                placeholder="예: abc.def@gmail.com (로그인 주소 그대로)"
+                autocomplete="username"
+                placeholder="지메일 아이디만 입력"
               />
               <button type="button" id="bus-share-send" class="big-btn secondary">
                 정류장 공유 보내기

@@ -324,9 +324,9 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   dialog.showModal();
   syncBusShareModalScrollLock();
 
-  const teaser = document.querySelector("#cloud-sync-teaser");
-  if (teaser && !teaser.open) {
-    teaser.open = true;
+  const shareTeaser = document.querySelector("#bus-share-teaser");
+  if (shareTeaser && !shareTeaser.open) {
+    shareTeaser.open = true;
   }
 
   if (forceFromUrl || urlRequestId) {
@@ -520,20 +520,18 @@ export async function refreshIncomingShareRequests(
  * @param {(text: string) => void} setStatus
  */
 export function initBusShareUi(client, session, setStatus) {
-  const root = document.querySelector("#bus-share-panel");
+  const teaser = document.querySelector("#bus-share-teaser");
   const sendInput = document.querySelector("#bus-share-to-email");
   const sendBtn = document.querySelector("#bus-share-send");
   const incomingEl = document.querySelector("#bus-share-incoming");
 
-  if (!root || !session?.user) {
-    if (root) root.hidden = true;
+  if (!teaser || !session?.user) {
+    if (teaser) teaser.hidden = true;
     return;
   }
 
-  root.hidden = false;
+  teaser.hidden = false;
   bindBusShareModalScrollLock();
-  const teaser = document.querySelector("#cloud-sync-teaser");
-  if (teaser) teaser.open = true;
 
   if (!shareUiBound) {
     shareUiBound = true;
@@ -542,7 +540,7 @@ export function initBusShareUi(client, session, setStatus) {
       sendBtn.addEventListener("click", async () => {
         const raw = String(sendInput.value || "").trim();
         if (!raw) {
-          showBusShareHint("받을 사람 Gmail을 입력해 주세요.");
+          showBusShareHint("받을 사람 지메일 아이디를 입력해 주세요.");
           sendInput.focus();
           return;
         }

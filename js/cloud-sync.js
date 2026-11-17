@@ -317,9 +317,9 @@ async function initGoogleAuthUi(client, cfg) {
       if (ticket !== renderSerial) return;
     } else {
       stopIncomingSharePolling();
-      const sharePanel = document.querySelector("#bus-share-panel");
+      const shareTeaser = document.querySelector("#bus-share-teaser");
       const incomingEl = document.querySelector("#bus-share-incoming");
-      if (sharePanel) sharePanel.hidden = true;
+      if (shareTeaser) shareTeaser.hidden = true;
       if (incomingEl) {
         incomingEl.hidden = true;
         incomingEl.replaceChildren();

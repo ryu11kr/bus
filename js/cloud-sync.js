@@ -83,11 +83,42 @@ window.getCloudSyncRuntime = () => cloudSyncRuntime;
 window.getSupabaseClient = () => supabaseClient;
 
 function authRedirectUrl() {
-  const path = window.location.pathname || "/";
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  let path = url.pathname || "/";
   if (path.endsWith("/index.html")) {
-    return `${window.location.origin}${path.replace(/index\.html$/i, "")}`;
+    path = path.replace(/\/index\.html$/i, "/");
   }
-  return `${window.location.origin}${path}`;
+  if (!path.endsWith("/")) {
+    path += "/";
+  }
+  return `${url.origin}${path}`;
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
+ */
+/** @returns {"ok" | "error" | "none"} */
+async function completeOAuthReturnIfNeeded(client) {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  if (!code) return "none";
+
+  const existing = await client.auth.getSession();
+  if (existing.data.session?.user) {
+    window.history.replaceState({}, document.title, authRedirectUrl());
+    return "ok";
+  }
+
+  const { error } = await client.auth.exchangeCodeForSession(code);
+  if (error) {
+    console.error(error);
+    return "error";
+  }
+
+  window.history.replaceState({}, document.title, authRedirectUrl());
+  return "ok";
 }
 
 function formatSignedInLabel(user) {
@@ -144,11 +175,15 @@ async function initGoogleAuthUi(client, cfg) {
     syncEl.textContent = text;
   });
 
+  let renderSerial = 0;
+
   /** @param {import("@supabase/supabase-js").Session | null} session */
   async function renderSession(session) {
+    const ticket = ++renderSerial;
     const signedIn = Boolean(session?.user);
     loginBtn.hidden = signedIn;
     logoutBtn.hidden = !signedIn;
+    loginBtn.disabled = false;
     if (signedIn) {
       statusEl.textContent = formatSignedInLabel(session.user);
       if (cfg.enabled) {
@@ -156,6 +191,7 @@ async function initGoogleAuthUi(client, cfg) {
       } else if (syncEl) {
         syncEl.hidden = true;
       }
+      if (ticket !== renderSerial) return;
     } else {
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled
@@ -201,16 +237,49 @@ async function initGoogleAuthUi(client, cfg) {
 
   statusEl.textContent = "로그인 상태 확인 중…";
   try {
+    const oauthResult = await completeOAuthReturnIfNeeded(client);
+    if (oauthResult === "error") {
+      statusEl.textContent =
+        "로그인을 마치지 못했습니다. 새로고침 후 다시 「구글로 로그인」을 눌러 주세요.";
+    }
+
     const { data, error } = await client.auth.getSession();
     if (error) throw error;
-    await renderSession(data.session);
+    if (data.session?.user) {
+      await renderSession(data.session);
+    } else if (oauthResult !== "error") {
+      await renderSession(null);
+    }
   } catch (error) {
     console.error(error);
     statusEl.textContent = "로그인을 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
   }
 
-  client.auth.onAuthStateChange((_event, session) => {
-    renderSession(session).catch(() => {});
+  client.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      renderSession(session).catch(() => {});
+      return;
+    }
+    if (event === "SIGNED_OUT") {
+      renderSession(null).catch(() => {});
+    }
+  });
+
+  async function refreshSessionFromStorage() {
+    const { data, error } = await client.auth.getSession();
+    if (error) return;
+    if (data.session?.user) {
+      await renderSession(data.session);
+    }
+  }
+
+  window.addEventListener("pageshow", () => {
+    refreshSessionFromStorage().catch(() => {});
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      refreshSessionFromStorage().catch(() => {});
+    }
   });
 }
 
@@ -241,8 +310,10 @@ async function initCloudSyncShell() {
     supabaseClient = createClient(cloudSyncRuntime.supabaseUrl, cloudSyncRuntime.supabaseAnonKey, {
       auth: {
         persistSession: true,
+        autoRefreshToken: true,
         detectSessionInUrl: true,
         flowType: "pkce",
+        storage: window.localStorage,
       },
     });
     await initGoogleAuthUi(supabaseClient, cloudSyncCfg);

@@ -5,9 +5,14 @@ import { pushLocalStateToCloud, runFullCloudSync } from "./cloud-sync-data.js";
 let shareUiBound = false;
 
 function normalizeEmail(email) {
-  return String(email || "")
+  let raw = String(email || "")
     .trim()
     .toLowerCase();
+  if (!raw) return "";
+  if (!raw.includes("@")) {
+    raw = `${raw}@gmail.com`;
+  }
+  return raw;
 }
 
 function isAndroidPushCapable() {

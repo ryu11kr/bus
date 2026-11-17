@@ -50,7 +50,7 @@
         <p id="stop-list-empty" class="times-empty">등록된 정류장이 없습니다.</p>
         <ul id="stop-list" class="stop-list"></ul>
 
-        <div class="list-action-panel">
+        <div class="list-info-panel">
           <details id="photo-guide-details" class="home-more panel-lite">
             <summary>사진찍기 가이드</summary>
             <figure class="photo-guide-figure">
@@ -104,20 +104,32 @@
               </button>
             </div>
           </details>
+        </div>
 
-          <div class="big-actions list-actions">
+        <section
+          class="stop-register-panel"
+          aria-labelledby="stop-register-heading"
+        >
+          <h2 id="stop-register-heading" class="stop-register-heading">
+            정류장등록
+          </h2>
+          <div class="big-actions list-actions stop-register-actions">
             <button type="button" id="btn-new-camera" class="big-btn primary">
               사진 찍어 등록
             </button>
             <button type="button" id="btn-new-album" class="big-btn secondary">
               앨범에서 등록
             </button>
-            <button id="install-btn" type="button" class="big-btn install-btn" hidden>
-              앱 설치하기
-            </button>
           </div>
+        </section>
+
+        <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
+
+        <div class="home-install-block">
+          <button id="install-btn" type="button" class="big-btn install-btn" hidden>
+            앱 설치하기
+          </button>
           <p id="install-hint" class="install-hint" hidden aria-hidden="true"></p>
-          <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
         </div>
       </section>
 

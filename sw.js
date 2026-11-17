@@ -54,7 +54,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   const path = url.pathname.replace(/\/$/, "");
-  if (/\/(?:js\/app\.js|css\/styles\.css|version\.json|index\.html)$/.test(path)) {
+  if (
+    /\/(?:js\/[^/]+\.js|css\/styles\.css|version\.json|index\.html|cloud-sync\.runtime\.json)$/.test(
+      path
+    )
+  ) {
     event.respondWith(networkFirst(request));
     return;
   }
@@ -67,6 +71,13 @@ self.addEventListener("message", (event) => {
 
   if (data.type === "SKIP_WAITING") {
     self.skipWaiting();
+    return;
+  }
+
+  if (data.type === "PURGE_CACHES") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+    );
     return;
   }
 

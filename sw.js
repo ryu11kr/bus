@@ -85,6 +85,29 @@ self.addEventListener("message", (event) => {
   if (data.type === "GET_VERSION") {
     event.source?.postMessage({ type: "VERSION", version: CACHE_NAME });
   }
+
+  if (data.type === "LOCAL_NOTIFICATION_TEST") {
+    const title = "기기 알림 테스트";
+    const body = "이 문구가 보이면 폰·앱 알림은 정상입니다.";
+    const iconUrl = new URL("./icons/icon-192.png", self.location.href).href;
+    event.waitUntil(
+      self.registration
+        .showNotification(title, {
+          body,
+          icon: iconUrl,
+          tag: `local-${Date.now()}`,
+          renotify: true,
+          vibrate: [200, 100, 200],
+        })
+        .catch(() =>
+          self.registration.showNotification(title, {
+            body,
+            tag: `local-${Date.now()}`,
+            renotify: true,
+          })
+        )
+    );
+  }
 });
 
 self.addEventListener("push", (event) => {
@@ -103,14 +126,26 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(title, {
+      const opts = {
         body,
-        icon: iconUrl,
-        badge: iconUrl,
         tag,
         data: { url },
         renotify: true,
-      });
+        vibrate: [180, 80, 180],
+        icon: iconUrl,
+        badge: iconUrl,
+      };
+      try {
+        await self.registration.showNotification(title, opts);
+      } catch {
+        await self.registration.showNotification(title, {
+          body,
+          tag,
+          data: { url },
+          renotify: true,
+          vibrate: [180, 80, 180],
+        });
+      }
       const requestId = typeof data.requestId === "string" ? data.requestId : "";
       const windowClients = await self.clients.matchAll({
         type: "window",

@@ -209,6 +209,100 @@ function isAndroidPushCapable() {
   return "PushManager" in window && "Notification" in window && "serviceWorker" in navigator;
 }
 
+function isInstalledPwa() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: minimal-ui)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    Boolean(navigator.standalone)
+  );
+}
+
+function describeNotificationEnvironment() {
+  const sw = navigator.serviceWorker?.controller;
+  const swUrl = sw?.scriptURL ? new URL(sw.scriptURL, location.href).pathname : "없음";
+  return [
+    `홈 화면 앱(PWA): ${isInstalledPwa() ? "예" : "아니오 — Chrome 탭이면 잠금 푸시가 거의 안 옵니다"}`,
+    `알림 권한: ${typeof Notification !== "undefined" ? Notification.permission : "미지원"}`,
+    `서비스 워커: ${sw ? "실행 중" : "없음 (페이지 새로고침 필요)"}`,
+    sw ? `워커: ${swUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * FCM 없이 기기·PWA·권한만 검사 (눌렀을 때 바로 떠야 함)
+ */
+async function runLocalNotificationTest() {
+  if (!isAndroidPushCapable()) {
+    return "Android PWA에서만 지원합니다.";
+  }
+  if (Notification.permission !== "granted") {
+    return "알림 권한이 허용이 아닙니다.\n설정 → 앱 → 내버스시간표 → 알림을 켜 주세요.";
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const icon = new URL("./icons/icon-192.png", location.href).href;
+  const tag = `local-page-${Date.now()}`;
+  try {
+    await reg.showNotification("기기 알림 테스트", {
+      body: "상단·잠금에 이 문구가 보이면 폰 설정은 정상입니다.",
+      icon,
+      tag,
+      renotify: true,
+      vibrate: [200, 100, 200],
+    });
+  } catch (err) {
+    console.warn(err);
+    reg.active?.postMessage({ type: "LOCAL_NOTIFICATION_TEST" });
+  }
+  return (
+    `${describeNotificationEnvironment()}\n\n` +
+    "방금 「기기 알림 테스트」를 띄웠습니다.\n" +
+    "3초 안에 상단·알림창에 안 보이면:\n" +
+    "• 설정에서 **내버스시간표** 앱 알림(Chrome 아님) 확인\n" +
+    "• 홈 화면에 추가한 아이콘으로 다시 실행\n" +
+    "• 삼성: 설정 → 알림 → 앱 알림 → 내버스시간표"
+  );
+}
+
+function formatServerPushResult(res) {
+  const push = res?.push;
+  const lines = [describeNotificationEnvironment(), ""];
+  if (!push) {
+    lines.push("서버 응답에 push 정보가 없습니다.");
+    return lines.join("\n");
+  }
+  lines.push(`서버 구독 수(시도): ${push.tried ?? "?"}`);
+  lines.push(`전송 성공: ${push.sent ?? 0}`);
+  if (push.skipped) lines.push(`결과: ${push.skipped}`);
+  if (Array.isArray(push.failures) && push.failures.length) {
+    lines.push("\n실패 상세:");
+    for (const f of push.failures) {
+      lines.push(
+        `• ${f.endpointHost || "?"} HTTP ${f.status ?? "?"}: ${String(f.message || "").slice(0, 120)}`
+      );
+    }
+    const has403 = push.failures.some((f) => f.status === 403 || f.status === 401);
+    if (has403) {
+      lines.push(
+        "\n403/401 = Vercel VAPID 공개·비밀 키가 짝이 아닙니다.\n" +
+          "메뉴얼대로 키를 새로 만들고 세 개를 같이 넣은 뒤 Redeploy 하세요."
+      );
+    }
+  }
+  if ((push.sent ?? 0) > 0) {
+    lines.push(
+      "\n서버는 FCM에 보냈습니다. 10초 안에 알림이 없으면:\n" +
+        "먼저 「기기 알림 테스트」가 보이는지 확인하세요.\n" +
+        "로컬은 되는데 서버만 안 되면 앱을 완전 종료한 뒤 다시 시도."
+    );
+  } else if (!push.failures?.length) {
+    lines.push("\n구독이 없습니다. 「Android 공유 알림 켜기」를 다시 누르세요.");
+  }
+  return lines.join("\n");
+}
+
 async function hasActivePushSubscription() {
   if (!isAndroidPushCapable() || Notification.permission !== "granted") return false;
   try {
@@ -419,9 +513,15 @@ export async function ensurePushSubscriptionOnServer() {
 export async function refreshPushReadiness(setStatus) {
   if (!isAndroidPushCapable()) return;
   const testBtn = document.querySelector("#bus-share-push-test");
+  const localTestBtn = document.querySelector("#bus-share-push-local-test");
+  if (localTestBtn) {
+    localTestBtn.hidden = Notification.permission !== "granted";
+  }
   try {
     const st = await authFetch("push-status");
-    if (testBtn) testBtn.hidden = !st.readyForLockScreenPush;
+    if (testBtn) {
+      testBtn.hidden = !(st.readyForLockScreenPush || Notification.permission === "granted");
+    }
     if (st.readyForLockScreenPush) {
       return;
     }
@@ -441,6 +541,14 @@ export async function tryEnableAndroidPush(client, session, setStatus) {
   if (!isAndroidPushCapable()) {
     setStatus?.(
       "Android Chrome·삼성 인터넷에서 PWA(홈 화면 추가) 후에만 푸시를 켤 수 있습니다."
+    );
+    return false;
+  }
+  if (!isInstalledPwa()) {
+    showBusShareHint(
+      "지금은 Chrome **탭**으로 열린 상태입니다.\n\n" +
+        "잠금화면 푸시는 **홈 화면에 추가한 내버스시간표 아이콘**으로 실행해야 합니다.\n\n" +
+        "설치 → 그 아이콘으로 다시 로그인 → 「Android 공유 알림 켜기」"
     );
     return false;
   }
@@ -806,6 +914,7 @@ export function initBusShareUi(client, session, setStatus) {
   const incomingEl = document.querySelector("#bus-share-incoming");
   const pushBtn = document.querySelector("#bus-share-push-enable");
   const pushTestBtn = document.querySelector("#bus-share-push-test");
+  const pushLocalTestBtn = document.querySelector("#bus-share-push-local-test");
 
   if (!root || !session?.user) {
     if (root) root.hidden = true;
@@ -834,27 +943,37 @@ export function initBusShareUi(client, session, setStatus) {
       });
     }
 
+    if (pushLocalTestBtn) {
+      pushLocalTestBtn.addEventListener("click", () => {
+        pushLocalTestBtn.disabled = true;
+        runLocalNotificationTest()
+          .then((msg) => showBusShareHint(msg))
+          .catch((err) => {
+            console.error(err);
+            showBusShareHint(
+              `로컬 알림 실패: ${err?.message || err}\n\n${describeNotificationEnvironment()}`
+            );
+          })
+          .finally(() => {
+            pushLocalTestBtn.disabled = false;
+          });
+      });
+    }
+
     if (pushTestBtn) {
       pushTestBtn.addEventListener("click", () => {
         pushTestBtn.disabled = true;
-        setStatus?.("테스트 알림 보내는 중…");
+        setStatus?.("서버 푸시 테스트 중…");
         authFetch("push-test-self", { method: "POST", body: "{}" })
           .then((res) => {
-            const push = res?.push;
-            if (push && push.sent > 0) {
-              setStatus?.(
-                "테스트 알림을 보냈습니다. 앱을 끄고 10초 안에 상단·잠금 화면을 확인하세요."
-              );
-              return;
-            }
-            const skipped = push?.skipped || "unknown";
-            setStatus?.(
-              `테스트 알림 실패 (${skipped}). 「Android 공유 알림 켜기」를 다시 해 주세요.`
-            );
+            setStatus?.("");
+            showBusShareHint(formatServerPushResult(res));
           })
           .catch((err) => {
             console.error(err);
-            setStatus?.("테스트 알림 요청 실패. 네트워크·로그인을 확인해 주세요.");
+            showBusShareHint(
+              `서버 요청 실패: ${err?.message || err}\n\n${describeNotificationEnvironment()}`
+            );
           })
           .finally(() => {
             pushTestBtn.disabled = false;

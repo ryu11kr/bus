@@ -81,7 +81,7 @@ Supabase **Project URL** 은 이미 있다고 가정합니다.
 
 | 증상 | 확인 |
 |------|------|
-| 로그인 화면에 supabase 주소만 보임 | `메뉴얼-구글로그인-화면이름.md` 브랜
+| 로그인 화면에 supabase 주소만 보임 | `메뉴얼-구글로그인-화면이름.md` 브랜딩 등록 |
 | redirect_uri_mismatch | Google redirect URI = `https://[ID].supabase.co/auth/v1/callback` |
 | 앱으로 안 돌아옴 | Supabase Redirect URLs에 `https://bus.uxpwa.com/**` |
 | 액세스 차단 (테스트) | OAuth consent screen **테스트 사용자**에 Gmail 추가 |

@@ -581,14 +581,6 @@ footer {
   color: var(--muted);
 }
 
-.cloud-sync-google-brand-hint {
-  margin: 0.65rem 0 0;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
 .cloud-sync-teaser-help {
   margin: 0.55rem 0 0;
   font-size: 1.1rem;

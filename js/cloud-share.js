@@ -566,11 +566,7 @@ export function initBusShareUi(client, session, setStatus) {
           await sendShareRequestViaClient(client, userId, fromEmail, toEmail);
           sendInput.value = "";
           setStatus?.("");
-          showBusShareHint(
-            "공유 요청을 보냈습니다.\n\n" +
-              "받는 사람은 앱을 켜고 **같은 Gmail**로 로그인하면 팝업이 뜹니다.\n" +
-              "(입력한 주소 = 상대 구글 로그인 주소와 같아야 합니다)"
-          );
+          showBusShareHint(`공유 요청을 보냈습니다.\n\n받는 사람: ${toEmail}`);
         } catch (err) {
           console.error(err);
           setStatus?.(describeShareError(err));

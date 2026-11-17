@@ -31,8 +31,9 @@ export async function sendSharePushToEmail(admin, toEmail, payload) {
   const lookupEmails = shareEmailLookupKeys(toEmail);
   const { data: rows, error } = await admin
     .from("bus_push_subscriptions")
-    .select("subscription")
-    .in("user_email", lookupEmails);
+    .select("subscription, updated_at")
+    .in("user_email", lookupEmails)
+    .order("updated_at", { ascending: false });
   if (error) throw error;
   if (!rows?.length) {
     return { sent: 0, skipped: "no_subscriptions", lookupEmails };

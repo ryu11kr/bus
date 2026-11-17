@@ -32,6 +32,11 @@ export default async function handler(req, res) {
   }
 
   const email = canonicalShareEmail(user.email);
+  await admin.from("bus_push_subscriptions").delete().eq("user_id", user.id).lt(
+    "updated_at",
+    new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  );
+
   const pushResult = await sendSharePushToEmail(admin, email, {
     title: "내버스시간표",
     body: "테스트 알림입니다. 잠금화면·상단바에 보이면 정상입니다.",

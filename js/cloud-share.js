@@ -288,28 +288,45 @@ function formatServerPushResult(res) {
   lines.push(`서버 구독 수(시도): ${push.tried ?? "?"}`);
   lines.push(`전송 성공: ${push.sent ?? 0}`);
   if (push.skipped) lines.push(`결과: ${push.skipped}`);
-  if (Array.isArray(push.failures) && push.failures.length) {
-    lines.push("\n실패 상세:");
-    for (const f of push.failures) {
+  const failures = Array.isArray(push.failures) ? push.failures : [];
+  const onlyStale410 =
+    failures.length > 0 && failures.every((f) => f.status === 410);
+  const sent = push.sent ?? 0;
+
+  if (failures.length) {
+    if (sent > 0 && onlyStale410) {
       lines.push(
-        `• ${f.endpointHost || "?"} HTTP ${f.status ?? "?"}: ${String(f.message || "").slice(0, 120)}`
+        `\n※ 예전에 알림 켰다/끈 적 있어 서버에 옛 토큰이 ${failures.length}개 남아 있었습니다. (본인 잘못 아님)`
       );
-    }
-    const has403 = push.failures.some((f) => f.status === 403 || f.status === 401);
-    if (has403) {
-      lines.push(
-        "\n403/401 = Vercel VAPID 공개·비밀 키가 짝이 아닙니다.\n" +
-          "메뉴얼대로 키를 새로 만들고 세 개를 같이 넣은 뒤 Redeploy 하세요."
-      );
+      lines.push(`지금 이 기기로는 전송 성공 ${sent}건입니다. 옛 토큰은 서버가 지우는 중입니다.`);
+    } else {
+      lines.push("\n실패 상세:");
+      for (const f of failures) {
+        lines.push(
+          `• ${f.endpointHost || "?"} HTTP ${f.status ?? "?"}: ${String(f.message || "").slice(0, 120)}`
+        );
+      }
+      const has403 = failures.some((f) => f.status === 403 || f.status === 401);
+      if (has403) {
+        lines.push(
+          "\n403/401 = Vercel VAPID 공개·비밀 키가 짝이 아닙니다.\n" +
+            "메뉴얼대로 키를 새로 만들고 세 개를 같이 넣은 뒤 Redeploy 하세요."
+        );
+      }
+      if (onlyStale410) {
+        lines.push(
+          "\n410 = 만료된 옛 구독입니다. 「알림 꺼졌을 때 · 다시 켜기 준비」 후 「Android 공유 알림 켜기」를 한 번 더 하세요."
+        );
+      }
     }
   }
-  if ((push.sent ?? 0) > 0) {
+  if (sent > 0) {
     lines.push(
       "\n서버는 FCM에 보냈습니다. 10초 안에 알림이 없으면:\n" +
         "먼저 「기기 알림 테스트」가 보이는지 확인하세요.\n" +
         "로컬은 되는데 서버만 안 되면 앱을 완전 종료한 뒤 다시 시도."
     );
-  } else if (!push.failures?.length) {
+  } else if (!failures.length) {
     lines.push("\n구독이 없습니다. 「Android 공유 알림 켜기」를 다시 누르세요.");
   }
   return lines.join("\n");
@@ -566,10 +583,19 @@ async function registerPushSubscriptionOnServer() {
     });
   }
 
+  const subJson = sub.toJSON();
   await authFetch("push-subscribe", {
     method: "POST",
-    body: JSON.stringify({ subscription: sub.toJSON() }),
+    body: JSON.stringify({ subscription: subJson }),
   });
+  try {
+    await authFetch("push-cleanup-self", {
+      method: "POST",
+      body: JSON.stringify({ endpoint: subJson.endpoint }),
+    });
+  } catch (err) {
+    console.warn("push-cleanup-self", err);
+  }
   return true;
 }
 

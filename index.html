@@ -178,7 +178,7 @@
           <p id="stop-name-dialog-help" class="dialog-help">
             공식 이름이 아니어도 됩니다. 기억하기 쉬운 이름을 적어 주세요.
           </p>
-          <label id="stop-name-field-wrap" class="pick-field text-field">
+          <label class="pick-field text-field">
             <span>예: 우리집앞 정류장, 읍내 정류장</span>
             <input
               id="stop-name-input"
@@ -189,21 +189,39 @@
               placeholder="정류장 이름"
             />
           </label>
-          <label id="stop-photo-label-wrap" class="pick-field text-field" hidden>
-            <span id="stop-photo-label-caption">이 사진 이름 (버스 번호·애칭)</span>
-            <input
-              id="photo-label-input"
-              type="text"
-              maxlength="30"
-              autocomplete="off"
-              placeholder="예: 271번, 평일, 주말"
-            />
-          </label>
           <div class="dialog-actions">
             <button type="submit" class="big-btn primary">저장</button>
             <button type="button" id="stop-name-cancel" class="big-btn ghost">
               취소
             </button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog
+        id="photo-label-dialog"
+        class="add-time-dialog"
+        aria-labelledby="photo-label-dialog-title"
+      >
+        <form id="photo-label-form" method="dialog">
+          <h2 id="photo-label-dialog-title">사진 애칭</h2>
+          <p id="photo-label-dialog-help" class="dialog-help">
+            버스 번호나 평일·주말처럼, 이 시간표 사진만 구분할 이름을 적어 주세요.
+          </p>
+          <label class="pick-field text-field">
+            <span>예: 271번, 15번, 평일, 주말</span>
+            <input
+              id="photo-label-input"
+              type="text"
+              maxlength="30"
+              required
+              autocomplete="off"
+              placeholder="버스 번호·애칭"
+            />
+          </label>
+          <div class="dialog-actions">
+            <button type="submit" class="big-btn primary">저장</button>
+            <button type="button" id="photo-label-cancel" class="big-btn ghost">취소</button>
           </div>
         </form>
       </dialog>

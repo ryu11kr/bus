@@ -1,4 +1,6 @@
-﻿/** @type {{ cachePrefix?: string; name?: string; description?: string } | null} */
+﻿import { inject } from '@vercel/analytics';
+
+/** @type {{ cachePrefix?: string; name?: string; description?: string } | null} */
 let pwaConfig = null;
 
 const installBtn = document.querySelector("#install-btn");
@@ -26,6 +28,7 @@ init();
 
 async function init() {
   await loadConfig();
+  inject();
   applyConfigToHero();
   renderNetwork();
   renderDisplayMode();

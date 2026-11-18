@@ -1,6 +1,7 @@
 {
-  "build": 28,
-  "cacheName": "bus-timetable-28",
-  "label": "빌드 28",
-  "updatedAt": "2026-11-17T00:00:00.000Z"
+  "build": 3390543105,
+  "cacheName": "bus-timetable-3390543105",
+  "label": "배포 local-1",
+  "updatedAt": "2026-11-18T15:22:58.023Z",
+  "commitSha": "local-1795015378022"
 }

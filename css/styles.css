@@ -510,7 +510,7 @@ footer {
   padding: 0.85rem 1rem;
   font-size: 1.15rem;
   line-height: 1.65;
-  text-align: left;
+  text-align: center;
   text-wrap: pretty;
   word-break: keep-all;
   overflow-wrap: break-word;

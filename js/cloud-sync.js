@@ -327,7 +327,7 @@ async function initGoogleAuthUi(client, cfg) {
       if (introEl) introEl.hidden = false;
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled
-        ? "아래 구글로 로그인해 두면, 휴대폰을 바꿔도 시간표를 다시 불러올 수 있습니다."
+        ? "구글 로그인을 하시면 다른 구글 로그인 사용자에게 내 버스정류장 정보를 공유할 수 있습니다."
         : "아래 구글로 로그인해 시간표를 안전하게 보관할 수 있습니다.";
       if (syncEl) {
         syncEl.hidden = true;

@@ -1325,7 +1325,7 @@ function renderStopDetail(stopId) {
       btnReplace.textContent = "이 사진 다시 찍기";
       btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
 
-      actions.append(btnReplace, btnDeletePhoto);
+      actions.append(btnDeletePhoto, btnReplace);
       li.append(nameBtn, hit, hint, actions);
       list.append(li);
     });

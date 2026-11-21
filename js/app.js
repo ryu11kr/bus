@@ -1313,17 +1313,17 @@ function renderStopDetail(stopId) {
       const actions = document.createElement("div");
       actions.className = "detail-photo-card-actions";
 
-      const btnReplace = document.createElement("button");
-      btnReplace.type = "button";
-      btnReplace.className = "big-btn secondary detail-photo-card-action";
-      btnReplace.textContent = "이 사진 다시 찍기";
-      btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
-
       const btnDeletePhoto = document.createElement("button");
       btnDeletePhoto.type = "button";
       btnDeletePhoto.className = "big-btn ghost danger-text detail-photo-card-action";
       btnDeletePhoto.textContent = "이 사진 삭제";
       btnDeletePhoto.addEventListener("click", () => deletePhotoFromStop(stop, p.id));
+
+      const btnReplace = document.createElement("button");
+      btnReplace.type = "button";
+      btnReplace.className = "big-btn secondary detail-photo-card-action";
+      btnReplace.textContent = "이 사진 다시 찍기";
+      btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
 
       actions.append(btnReplace, btnDeletePhoto);
       li.append(nameBtn, hit, hint, actions);

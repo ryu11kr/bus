@@ -125,7 +125,7 @@ function showBusShareHint(message) {
   okBtn.focus();
 }
 
-function yieldToPaint() {
+export function yieldToPaint() {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   });
@@ -144,7 +144,7 @@ function resetSharePopupBusyUi() {
  * @param {string} message
  * @param {(text: string) => void} [setStatus]
  */
-function showShareAcceptBusy(message, setStatus) {
+export function showShareAcceptBusy(message, setStatus) {
   shareAcceptBusyActive = true;
   setStatus?.(message);
   const popup = document.querySelector("#bus-share-popup");
@@ -168,7 +168,7 @@ function showShareAcceptBusy(message, setStatus) {
 /**
  * @param {(text: string) => void} [setStatus]
  */
-function hideShareAcceptBusy(setStatus) {
+export function hideShareAcceptBusy(setStatus) {
   if (!shareAcceptBusyActive) return;
   shareAcceptBusyActive = false;
   const overlay = document.querySelector("#bus-share-busy");

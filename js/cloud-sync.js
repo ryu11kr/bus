@@ -8,10 +8,13 @@ import {
 } from "./cloud-sync-data.js";
 import {
   authFetch,
+  hideShareAcceptBusy,
   initBusShareUi,
   refreshIncomingShareRequests,
+  showShareAcceptBusy,
   startIncomingSharePolling,
   stopIncomingSharePolling,
+  yieldToPaint,
 } from "./cloud-share.js";
 
 const DEFAULT_CLOUD_SYNC_CONFIG = {
@@ -272,8 +275,14 @@ function bindAccountDeleteUi(client, renderSession) {
     if (!ok) return;
 
     btn.disabled = true;
+    showShareAcceptBusy("서비스 탈퇴를 처리하는 중입니다…", null);
+    await yieldToPaint();
     try {
+      showShareAcceptBusy("클라우드 데이터를 삭제하는 중입니다…", null);
+      await yieldToPaint();
       await authFetch("account-delete", { method: "POST", body: JSON.stringify({}) });
+      showShareAcceptBusy("이 기기의 데이터를 정리하는 중입니다…", null);
+      await yieldToPaint();
       stopIncomingSharePolling();
       cloudSaveListenerBound = false;
       if (typeof window.busAppClearAllLocalData === "function") {
@@ -286,10 +295,12 @@ function bindAccountDeleteUi(client, renderSession) {
       }
       purgeSupabaseAuthKeys();
       await renderSession(null);
+      hideShareAcceptBusy();
       if (typeof window.setBusStatus === "function") {
         window.setBusStatus("서비스 탈퇴가 완료되었습니다.");
       }
     } catch (error) {
+      hideShareAcceptBusy();
       console.error(error);
       const code = error?.code || error?.message;
       let msg = "서비스 탈퇴에 실패했습니다. 잠시 후 다시 시도해 주세요.";
@@ -301,6 +312,7 @@ function bindAccountDeleteUi(client, renderSession) {
         window.setBusStatus(msg);
       }
     } finally {
+      hideShareAcceptBusy();
       btn.disabled = false;
     }
   });

@@ -651,11 +651,12 @@ footer {
 
 .app-share-url {
   margin: 0 0 1.1rem;
-  padding: 0.9rem 0.95rem;
-  font-size: clamp(1.22rem, 4.8vw, 1.5rem);
+  padding: 1rem 1.05rem;
+  font-size: clamp(1.55rem, 6.5vw, 2rem);
   font-weight: 800;
-  line-height: 1.5;
-  word-break: break-all;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  word-break: keep-all;
   color: var(--brand-deep);
   background: var(--brand-tint);
   border: 2px solid var(--brand);

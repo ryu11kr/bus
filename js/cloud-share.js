@@ -376,7 +376,10 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
 
   let row = null;
   if (targetId) {
-    row = pendingRows.find((r) => String(r.id) === String(targetId)) || null;
+    const hit = pendingRows.find((r) => String(r.id) === String(targetId)) || null;
+    if (hit && (forceFromUrl || !dismissed.has(String(hit.id)))) {
+      row = hit;
+    }
   }
   if (!row && forceFromUrl) {
     row = pendingRows[0];
@@ -384,10 +387,8 @@ function maybeShowSharePopup(pendingRows, client, userEmail, listEl, setStatus, 
   if (!row) {
     row = pendingRows.find((r) => !dismissed.has(String(r.id))) || null;
   }
-  if (!row && pendingRows.length) {
-    row = pendingRows[0];
-  }
   if (!row) return;
+  if (dismissed.has(String(row.id)) && !forceFromUrl) return;
   if (dialog.open && popupCurrentRequest?.id === row.id) return;
 
   popupCurrentRequest = { id: String(row.id), from_email: row.from_email };

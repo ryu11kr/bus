@@ -27,6 +27,13 @@ function isBusShareModalOpen() {
   return Boolean(share?.open || hint?.open);
 }
 
+function isBusFormNameOrLabelDialogOpen() {
+  const stopName = document.querySelector("#stop-name-dialog");
+  const photoLabel = document.querySelector("#photo-label-dialog");
+  const statusDialog = document.querySelector("#bus-status-dialog");
+  return Boolean(stopName?.open || photoLabel?.open || statusDialog?.open);
+}
+
 function syncBusShareModalScrollLock() {
   if (isBusShareModalOpen()) {
     if (!document.body.classList.contains("bus-modal-scroll-lock")) {
@@ -36,6 +43,7 @@ function syncBusShareModalScrollLock() {
     }
     return;
   }
+  if (isBusFormNameOrLabelDialogOpen()) return;
   if (document.body.classList.contains("bus-modal-scroll-lock")) {
     document.body.classList.remove("bus-modal-scroll-lock");
     document.body.style.top = "";

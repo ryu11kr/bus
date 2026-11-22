@@ -69,6 +69,8 @@ function initApp() {
 
   loadBusState();
   bindBusUi();
+  bindBusFormModalScrollLock();
+  bindBusStatusDialog();
   bindPhotoViewer();
   bindSamsungPinchGuard();
   bindAppUpdateUi();
@@ -504,6 +506,91 @@ function bindSamsungPinchGuard() {
 
 let photoViewerScrollLockY = 0;
 
+let busFormModalScrollLockY = 0;
+let busFormModalScrollLockBound = false;
+
+function isBusFormDialogOpen() {
+  const ids = ["stop-name-dialog", "photo-label-dialog", "bus-status-dialog"];
+  return ids.some((id) => document.querySelector(`#${id}`)?.open);
+}
+
+function isOtherBusModalScrollLockOpen() {
+  const share = document.querySelector("#bus-share-popup");
+  const hint = document.querySelector("#bus-share-hint-dialog");
+  return Boolean(share?.open || hint?.open);
+}
+
+function syncBusFormModalScrollLock() {
+  if (isBusFormDialogOpen()) {
+    if (
+      !document.body.classList.contains("bus-modal-scroll-lock") &&
+      !document.body.classList.contains("photo-viewer-lock")
+    ) {
+      busFormModalScrollLockY = window.scrollY || 0;
+      document.body.classList.add("bus-modal-scroll-lock");
+      document.body.style.top = `-${busFormModalScrollLockY}px`;
+    }
+    return;
+  }
+  if (
+    !isOtherBusModalScrollLockOpen() &&
+    document.body.classList.contains("bus-modal-scroll-lock") &&
+    !document.body.classList.contains("photo-viewer-lock")
+  ) {
+    document.body.classList.remove("bus-modal-scroll-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, busFormModalScrollLockY);
+  }
+}
+
+function bindBusFormModalScrollLock() {
+  if (busFormModalScrollLockBound) return;
+  busFormModalScrollLockBound = true;
+  for (const id of ["stop-name-dialog", "photo-label-dialog", "bus-status-dialog"]) {
+    document.querySelector(`#${id}`)?.addEventListener("close", syncBusFormModalScrollLock);
+  }
+}
+
+let busStatusDialogBound = false;
+
+/** @param {string} text */
+function shouldBusStatusUseModal(text) {
+  if (!text) return false;
+  if (/…/.test(text) || /중입니다/.test(text)) return false;
+  if (text.startsWith("이제 이 사진 애칭")) return false;
+  if (text.startsWith("보정을 마쳤습니다")) return false;
+  if (text === "이 사진 애칭(버스 번호 등)을 적어 주세요.") return false;
+  return true;
+}
+
+function bindBusStatusDialog() {
+  const dialog = document.querySelector("#bus-status-dialog");
+  const okBtn = document.querySelector("#bus-status-dialog-ok");
+  if (!dialog || !okBtn || busStatusDialogBound) return;
+  busStatusDialogBound = true;
+  okBtn.addEventListener("click", () => {
+    if (dialog.open) dialog.close();
+  });
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    dialog.close();
+  });
+}
+
+/** @param {string} message */
+function showBusStatusModal(message) {
+  const dialog = document.querySelector("#bus-status-dialog");
+  const bodyEl = document.querySelector("#bus-status-dialog-body");
+  const okBtn = document.querySelector("#bus-status-dialog-ok");
+  if (!dialog || !bodyEl || !okBtn) return;
+  bindBusStatusDialog();
+  bodyEl.textContent = message;
+  if (dialog.open) dialog.close();
+  dialog.showModal();
+  syncBusFormModalScrollLock();
+  okBtn.focus();
+}
+
 function lockPageForPhotoViewer() {
   photoViewerScrollLockY = window.scrollY || 0;
   document.body.classList.add("photo-viewer-lock");
@@ -881,6 +968,7 @@ function openPhotoLabelDialog(currentLabel) {
   if (!dialog || !input) return;
   input.value = currentLabel || "";
   dialog.showModal();
+  syncBusFormModalScrollLock();
   input.focus();
 }
 
@@ -906,6 +994,7 @@ function openNameDialog(mode, values) {
   stopInput.setAttribute("required", "");
   stopInput.value = v.stopName || "";
   dialog.showModal();
+  syncBusFormModalScrollLock();
   stopInput.focus();
 }
 
@@ -997,10 +1086,27 @@ function syncBusMainVisibility() {
 
 function setBusStatus(message) {
   const text = message || "";
+  const useModal = shouldBusStatusUseModal(text);
+  const statusDialog = document.querySelector("#bus-status-dialog");
+
   document.querySelectorAll(".bus-status").forEach((el) => {
-    el.textContent = text;
+    el.textContent = useModal ? "" : text;
   });
   syncBusMainVisibility();
+
+  if (!text) {
+    if (statusDialog?.open) statusDialog.close();
+    syncBusFormModalScrollLock();
+    return;
+  }
+
+  if (useModal) {
+    showBusStatusModal(text);
+    return;
+  }
+
+  if (statusDialog?.open) statusDialog.close();
+  syncBusFormModalScrollLock();
 }
 
 
@@ -1274,20 +1380,13 @@ function renderStopDetail(stopId) {
       const li = document.createElement("li");
       li.className = "detail-photo-card panel-lite";
 
-      const nameBtn = document.createElement("button");
-      nameBtn.type = "button";
-      nameBtn.className = "detail-photo-label-btn";
-      const value = document.createElement("span");
-      value.className = "detail-photo-label-btn-value";
       const hasLabel = photoHasCustomLabel(p);
-      value.textContent = hasLabel ? displayPhotoLabel(p, index) : "버스 번호·애칭 적기";
-      if (!hasLabel) value.classList.add("is-placeholder");
-      nameBtn.append(value);
-      nameBtn.addEventListener("click", () => {
-        pendingStopAction = "rename-photo-label";
-        pendingPhotoLabelEditId = p.id;
-        openPhotoLabelDialog(p.label || "");
-      });
+      const labelTitle = document.createElement("p");
+      labelTitle.className = "detail-photo-card-title";
+      labelTitle.textContent = hasLabel
+        ? displayPhotoLabel(p, index)
+        : "버스 번호·애칭 적기";
+      if (!hasLabel) labelTitle.classList.add("is-placeholder");
 
       const hit = document.createElement("button");
       hit.type = "button";
@@ -1306,12 +1405,28 @@ function renderStopDetail(stopId) {
         }
       });
 
-      const hint = document.createElement("p");
-      hint.className = "detail-photo-card-hint";
-      hint.textContent = "사진을 누르면 크게 볼 수 있습니다";
-
       const actions = document.createElement("div");
       actions.className = "detail-photo-card-actions";
+
+      const btnRenamePhoto = document.createElement("button");
+      btnRenamePhoto.type = "button";
+      btnRenamePhoto.className = "big-btn secondary detail-photo-card-action";
+      btnRenamePhoto.textContent = "이 사진 이름 바꾸기";
+      btnRenamePhoto.addEventListener("click", () => {
+        pendingStopAction = "rename-photo-label";
+        pendingPhotoLabelEditId = p.id;
+        openPhotoLabelDialog(p.label || "");
+      });
+
+      const btnViewLarge = document.createElement("button");
+      btnViewLarge.type = "button";
+      btnViewLarge.className = "big-btn primary detail-photo-card-action";
+      btnViewLarge.textContent = "이 사진 크게보기";
+      btnViewLarge.addEventListener("click", () => {
+        if (typeof window.busAppOpenPhotoViewer === "function") {
+          window.busAppOpenPhotoViewer(p);
+        }
+      });
 
       const btnDeletePhoto = document.createElement("button");
       btnDeletePhoto.type = "button";
@@ -1325,8 +1440,8 @@ function renderStopDetail(stopId) {
       btnReplace.textContent = "이 사진 다시 찍기";
       btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
 
-      actions.append(btnDeletePhoto, btnReplace);
-      li.append(nameBtn, hit, hint, actions);
+      actions.append(btnRenamePhoto, btnViewLarge, btnDeletePhoto, btnReplace);
+      li.append(labelTitle, hit, actions);
       list.append(li);
     });
   }

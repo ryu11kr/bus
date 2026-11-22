@@ -1306,7 +1306,26 @@ body.bus-app button.detail-photo-hit:focus-visible {
   outline-offset: 2px;
 }
 
+.detail-photo-card-title {
+  margin: 0 0 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  border: 2px solid var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand-ink);
+  font-size: clamp(1.15rem, 4.2vw, 1.4rem);
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.detail-photo-card-title.is-placeholder {
+  color: #64748b;
+  font-weight: 700;
+}
+
 .detail-photo-card .detail-photo-hit {
+  margin-bottom: 0.65rem;
   border-radius: 0.75rem;
 }
 

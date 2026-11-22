@@ -1299,14 +1299,25 @@ function qrCodeImageUrl(text, size = 512) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=14&data=${encodeURIComponent(text)}`;
 }
 
+function formatAppShareUrlDisplay(absoluteUrl) {
+  try {
+    const host = new URL(absoluteUrl).hostname;
+    if (host) return host;
+  } catch {
+    /* ignore */
+  }
+  return absoluteUrl.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
 function renderAppSharePage() {
   const url = getAppPublicShareUrl();
+  const displayUrl = formatAppShareUrlDisplay(url);
   const urlEl = document.querySelector("#app-share-url");
   const qrImg = document.querySelector("#app-share-qr");
-  if (urlEl) urlEl.textContent = url;
+  if (urlEl) urlEl.textContent = displayUrl;
   if (qrImg) {
     qrImg.src = qrCodeImageUrl(url, 512);
-    qrImg.alt = `버스첩 앱 주소 QR 코드 — ${url}`;
+    qrImg.alt = `버스첩 앱 주소 QR 코드 — ${displayUrl}`;
   }
 }
 

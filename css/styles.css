@@ -686,10 +686,23 @@ footer {
 }
 
 .cloud-sync-teaser,
-.bus-share-teaser {
+.bus-share-teaser,
+.bus-account-delete-teaser {
   margin-top: 0.35rem;
   padding-top: 0.65rem;
   border-top: 1px solid var(--line);
+}
+
+.bus-account-delete-msg {
+  margin: 0.65rem 0 0;
+  font-size: 1.12rem;
+  line-height: 1.58;
+  text-align: left;
+  color: var(--muted);
+}
+
+.bus-account-delete-teaser .big-btn {
+  margin-top: 0.85rem;
 }
 
 .cloud-sync-teaser-msg {

@@ -1990,6 +1990,24 @@ window.busAppGetLocalStopState = function busAppGetLocalStopState() {
   }
 };
 
+window.setBusStatus = setBusStatus;
+
+window.busAppClearAllLocalData = function busAppClearAllLocalData() {
+  busStops = [];
+  activeStopId = null;
+  activePhotoId = null;
+  try {
+    localStorage.removeItem(BUS_STORAGE_KEY);
+    localStorage.removeItem("bus-timetable-v1");
+  } catch {
+    /* ignore */
+  }
+  showListView();
+  renderStopList();
+  updateHomeIntroChrome();
+  notifyBusStopsChanged();
+};
+
 window.busAppApplyCloudStops = function busAppApplyCloudStops(stops, meta) {
   busStops = normalizeBusStopsFromCloud(stops);
   const stateUpdatedAt =

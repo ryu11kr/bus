@@ -7,6 +7,7 @@ import {
   setCloudSyncStatusCallback,
 } from "./cloud-sync-data.js";
 import {
+  authFetch,
   initBusShareUi,
   refreshIncomingShareRequests,
   startIncomingSharePolling,
@@ -62,6 +63,7 @@ let cloudSyncRuntime = null;
 let supabaseClient = null;
 
 let cloudSaveListenerBound = false;
+let accountDeleteUiBound = false;
 
 /**
  * @returns {Promise<CloudSyncRuntime | null>}
@@ -250,6 +252,62 @@ function startSessionCloudSync(session, cfg) {
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} client
+ * @param {(session: import("@supabase/supabase-js").Session | null) => Promise<void>} renderSession
+ */
+function bindAccountDeleteUi(client, renderSession) {
+  if (accountDeleteUiBound) return;
+  accountDeleteUiBound = true;
+
+  const btn = document.querySelector("#bus-account-delete-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    const ok = window.confirm(
+      "정말 서비스를 탈퇴하시겠습니까?\n\n" +
+        "· 구글 로그인 연동이 삭제됩니다.\n" +
+        "· 클라우드에 저장된 정류장·시간표 사진이 모두 삭제됩니다.\n" +
+        "· 이 휴대폰의 정류장 목록도 지워집니다.\n\n" +
+        "삭제 후에는 복구할 수 없습니다."
+    );
+    if (!ok) return;
+
+    btn.disabled = true;
+    try {
+      await authFetch("account-delete", { method: "POST", body: JSON.stringify({}) });
+      stopIncomingSharePolling();
+      cloudSaveListenerBound = false;
+      if (typeof window.busAppClearAllLocalData === "function") {
+        window.busAppClearAllLocalData();
+      }
+      try {
+        await client.auth.signOut({ scope: "global" });
+      } catch {
+        await client.auth.signOut({ scope: "local" });
+      }
+      purgeSupabaseAuthKeys();
+      await renderSession(null);
+      if (typeof window.setBusStatus === "function") {
+        window.setBusStatus("서비스 탈퇴가 완료되었습니다.");
+      }
+    } catch (error) {
+      console.error(error);
+      const code = error?.code || error?.message;
+      let msg = "서비스 탈퇴에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+      if (code === "login_required") msg = "다시 로그인한 뒤 탈퇴를 진행해 주세요.";
+      if (code === "server_not_configured") {
+        msg = "서버 설정이 되지 않아 탈퇴할 수 없습니다. 운영자에게 문의해 주세요.";
+      }
+      if (typeof window.setBusStatus === "function") {
+        window.setBusStatus(msg);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} client
  * @param {typeof DEFAULT_CLOUD_SYNC_CONFIG} cfg
  */
 async function initGoogleAuthUi(client, cfg) {
@@ -289,8 +347,15 @@ async function initGoogleAuthUi(client, cfg) {
     logoutBtn.hidden = !signedIn;
     loginBtn.disabled = false;
     if (introEl) introEl.hidden = signedIn;
+    const deleteTeaser = document.querySelector("#bus-account-delete-teaser");
+    if (deleteTeaser) {
+      deleteTeaser.hidden = !signedIn;
+      if (!signedIn) deleteTeaser.open = false;
+    }
+
     if (signedIn) {
       statusEl.textContent = formatSignedInLabel(session.user);
+      bindAccountDeleteUi(client, renderSession);
       if (cfg.enabled) {
         startSessionCloudSync(session, cfg);
       } else if (syncEl) {

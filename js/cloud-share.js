@@ -196,7 +196,7 @@ function apiBase() {
   return new URL("./api/", window.location.href).href;
 }
 
-async function authFetch(path, options = {}) {
+export async function authFetch(path, options = {}) {
   const client = window.getSupabaseClient?.();
   if (!client) throw new Error("no_client");
   const { data } = await client.auth.getSession();

@@ -124,6 +124,11 @@
         <p id="bus-status-list" class="bus-status" aria-live="polite" role="status"></p>
 
         <div class="list-info-panel">
+          <div id="bus-share-pending-panel" class="bus-share-pending-panel panel-lite" hidden>
+            <p class="bus-share-pending-lede">공유받은 정류장 요청</p>
+            <p class="bus-share-pending-hint">「나중에」를 눌러도 여기서 수락·거절할 수 있습니다.</p>
+            <div id="bus-share-incoming" class="bus-share-incoming" aria-live="polite"></div>
+          </div>
 
           <details id="cloud-sync-teaser" class="home-more panel-lite cloud-sync-teaser">
             <summary>정류장 보관</summary>
@@ -169,7 +174,6 @@
               <button type="button" id="bus-share-send" class="big-btn secondary">
                 정류장 공유하기
               </button>
-              <div id="bus-share-incoming" class="bus-share-incoming" hidden aria-live="polite"></div>
             </div>
           </details>
 

@@ -11,6 +11,7 @@ import {
   hideShareAcceptBusy,
   initBusShareUi,
   refreshIncomingShareRequests,
+  syncBusSharePendingPanel,
   showShareAcceptBusy,
   startIncomingSharePolling,
   stopIncomingSharePolling,
@@ -394,13 +395,11 @@ async function initGoogleAuthUi(client, cfg) {
       if (ticket !== renderSerial) return;
     } else {
       stopIncomingSharePolling();
+      syncBusSharePendingPanel(0);
       const shareTeaser = document.querySelector("#bus-share-teaser");
       const incomingEl = document.querySelector("#bus-share-incoming");
       if (shareTeaser) shareTeaser.hidden = true;
-      if (incomingEl) {
-        incomingEl.hidden = true;
-        incomingEl.replaceChildren();
-      }
+      if (incomingEl) incomingEl.replaceChildren();
       if (introEl) introEl.hidden = false;
       cloudSaveListenerBound = false;
       statusEl.textContent = cfg.enabled

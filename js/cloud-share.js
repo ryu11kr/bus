@@ -7,6 +7,22 @@ import {
 } from "./cloud-sync-data.js";
 
 let shareUiBound = false;
+let pendingShareIncomingCount = 0;
+
+function signedInForSharePanel() {
+  const logoutBtn = document.querySelector("#cloud-sync-logout");
+  return Boolean(logoutBtn && !logoutBtn.hidden);
+}
+
+export function syncBusSharePendingPanel(pendingCount) {
+  const panel = document.querySelector("#bus-share-pending-panel");
+  if (!panel) return;
+  const count =
+    typeof pendingCount === "number" && Number.isFinite(pendingCount)
+      ? pendingCount
+      : pendingShareIncomingCount;
+  panel.hidden = !(signedInForSharePanel() && count > 0);
+}
 
 const SHARE_POPUP_DISMISSED_KEY = "bus-share-popup-dismissed";
 
@@ -607,10 +623,9 @@ export async function refreshIncomingShareRequests(
 ) {
   const email = normalizeEmail(userEmail);
   if (!email) {
-    if (listEl) {
-      listEl.hidden = true;
-      listEl.replaceChildren();
-    }
+    if (listEl) listEl.replaceChildren();
+    pendingShareIncomingCount = 0;
+    syncBusSharePendingPanel(0);
     return;
   }
 
@@ -624,18 +639,21 @@ export async function refreshIncomingShareRequests(
   if (error) {
     console.error(error);
     setStatus?.("공유 요청을 불러오지 못했습니다.");
+    pendingShareIncomingCount = 0;
+    syncBusSharePendingPanel(0);
     return;
   }
+
+  pendingShareIncomingCount = data?.length || 0;
+  syncBusSharePendingPanel(pendingShareIncomingCount);
 
   if (listEl) {
     listEl.replaceChildren();
     if (!data?.length) {
-      listEl.hidden = true;
       maybeShowSharePopup([], client, userEmail, listEl, setStatus, preferRequestId);
       syncSharePendingNudge([], client, userEmail, listEl, setStatus);
       return;
     }
-    listEl.hidden = false;
   }
 
   if (!data?.length) {

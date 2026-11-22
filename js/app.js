@@ -71,10 +71,12 @@ function initApp() {
   bindBusUi();
   bindBusFormModalScrollLock();
   bindBusStatusDialog();
+  bindAppShareUi();
   bindPhotoViewer();
   bindSamsungPinchGuard();
   bindAppUpdateUi();
   showListView();
+  updateInstallButtonVisibility();
   renderStopList();
 }
 
@@ -1270,12 +1272,72 @@ function collapseListPanelDetails() {
 function showListView() {
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
+  document.querySelector("#view-app-share")?.setAttribute("hidden", "");
 }
 
 function showDetailView() {
   collapseListPanelDetails();
   document.querySelector("#view-list")?.setAttribute("hidden", "");
+  document.querySelector("#view-app-share")?.setAttribute("hidden", "");
   document.querySelector("#view-detail")?.removeAttribute("hidden");
+}
+
+function getAppPublicShareUrl() {
+  const canonical = document.querySelector('link[rel="canonical"]')?.href?.trim();
+  if (canonical) return canonical;
+  const fromConfig = typeof pwaConfig?.publicUrl === "string" ? pwaConfig.publicUrl.trim() : "";
+  if (fromConfig) {
+    return fromConfig.endsWith("/") ? fromConfig : `${fromConfig}/`;
+  }
+  const u = new URL(location.href);
+  u.search = "";
+  u.hash = "";
+  return u.href;
+}
+
+function qrCodeImageUrl(text, size = 512) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=14&data=${encodeURIComponent(text)}`;
+}
+
+function renderAppSharePage() {
+  const url = getAppPublicShareUrl();
+  const urlEl = document.querySelector("#app-share-url");
+  const qrImg = document.querySelector("#app-share-qr");
+  if (urlEl) urlEl.textContent = url;
+  if (qrImg) {
+    qrImg.src = qrCodeImageUrl(url, 512);
+    qrImg.alt = `버스첩 앱 주소 QR 코드 — ${url}`;
+  }
+}
+
+function showAppShareView() {
+  collapseListPanelDetails();
+  document.querySelector("#view-list")?.setAttribute("hidden", "");
+  document.querySelector("#view-detail")?.setAttribute("hidden", "");
+  document.querySelector("#view-app-share")?.removeAttribute("hidden");
+  renderAppSharePage();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function bindAppShareUi() {
+  document.querySelector("#app-share-btn")?.addEventListener("click", () => {
+    showAppShareView();
+  });
+  document.querySelector("#btn-back-from-app-share")?.addEventListener("click", () => {
+    showListView();
+    setBusStatus("");
+  });
+}
+
+function isAppStandaloneInstalled() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true
+  );
+}
+
+function updateInstallButtonVisibility() {
+  if (!installBtn) return;
+  installBtn.hidden = isAppStandaloneInstalled();
 }
 
 function updateHomeIntroChrome() {
@@ -1643,20 +1705,28 @@ function bindInstall() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event;
-    installBtn.hidden = false;
-    installBtn.disabled = false;
+    if (installBtn) {
+      installBtn.disabled = false;
+    }
+    updateInstallButtonVisibility();
   });
 
-  installBtn.addEventListener("click", async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    installBtn.disabled = true;
+  installBtn?.addEventListener("click", async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.disabled = true;
+      return;
+    }
+    setBusStatus(
+      "브라우저 메뉴(⋮)에서 '앱 설치' 또는 '홈 화면에 추가'를 눌러 주세요. iPhone은 공유(↑) 버튼을 이용하세요."
+    );
   });
 
   window.addEventListener("appinstalled", () => {
     renderDisplayMode();
+    updateInstallButtonVisibility();
   });
 }
 

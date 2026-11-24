@@ -445,14 +445,39 @@ function bindBusUi() {
   photoLabelForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const photoLabelInput = document.querySelector("#photo-label-input");
+    const photoLabelHelp = document.querySelector("#photo-label-dialog-help");
     const photoLabel = photoLabelInput?.value?.trim();
-    if (!photoLabel) return;
+    if (!photoLabel) {
+      if (photoLabelHelp) {
+        photoLabelHelp.textContent =
+          "버스 번호나 평일·주말처럼 구분할 이름을 적은 뒤 저장을 눌러 주세요.";
+      }
+      photoLabelInput?.focus();
+      return;
+    }
 
-    if (pendingStopAction === "rename-photo-label" && pendingPhotoLabelEditId) {
+    /** @type {string} */
+    let statusMessage = "";
+    const action = pendingStopAction;
+    const draft = pendingStopDraft;
+    const newName = pendingNewStopName;
+    const editPhotoId = pendingPhotoLabelEditId;
+    const addStopId = replaceStopId;
+
+    pendingStopDraft = null;
+    pendingStopAction = null;
+    replaceStopId = null;
+    replacePhotoId = null;
+    pendingPhotoLabelEditId = null;
+    pendingNewStopName = null;
+    photoLabelDialog?.close();
+    syncBusFormModalScrollLock();
+
+    if (action === "rename-photo-label" && editPhotoId) {
       const stop = getActiveStop();
       if (stop) {
         const photos = getStopPhotos(stop);
-        const hit = photos.find((p) => p.id === pendingPhotoLabelEditId);
+        const hit = photos.find((p) => p.id === editPhotoId);
         if (hit) hit.label = photoLabel;
         stop.photos = photos;
         stop.updatedAt = new Date().toISOString();
@@ -460,15 +485,15 @@ function bindBusUi() {
         saveBusState();
         renderStopDetail(stop.id);
         renderStopList();
-        setBusStatus("사진 애칭을 바꿨습니다.");
+        statusMessage = "사진 애칭을 바꿨습니다.";
       }
-    } else if (pendingStopAction === "photo-label" && pendingStopDraft && replaceStopId) {
-      const stop = busStops.find((s) => s.id === replaceStopId);
+    } else if (action === "photo-label" && draft && addStopId) {
+      const stop = busStops.find((s) => s.id === addStopId);
       if (stop) {
         if (getStopPhotos(stop).length >= maxPhotosPerStop()) {
-          setBusStatus(`한 정류장에는 사진 ${maxPhotosPerStop()}장까지 넣을 수 있습니다.`);
+          statusMessage = `한 정류장에는 사진 ${maxPhotosPerStop()}장까지 넣을 수 있습니다.`;
         } else {
-          const photo = photoFromDraft(pendingStopDraft, photoLabel);
+          const photo = photoFromDraft(draft, photoLabel);
           if (!Array.isArray(stop.photos)) stop.photos = getStopPhotos(stop);
           stop.photos.push(photo);
           stop.updatedAt = new Date().toISOString();
@@ -478,27 +503,25 @@ function bindBusUi() {
           saveBusState();
           renderStopDetail(stop.id);
           renderStopList();
-          setBusStatus("시간표 사진을 추가했습니다.");
+          statusMessage = "시간표 사진을 추가했습니다.";
         }
       }
-    } else if (pendingStopAction === "new-photo-label" && pendingStopDraft && pendingNewStopName) {
-      const stop = createStopFromDraft(pendingStopDraft, pendingNewStopName, photoLabel);
+    } else if (action === "new-photo-label" && draft && newName) {
+      const stop = createStopFromDraft(draft, newName, photoLabel);
       busStops.unshift(stop);
       activeStopId = stop.id;
       activePhotoId = getStopPhotos(stop).at(-1)?.id || null;
       saveBusState();
       renderStopDetail(stop.id);
       renderStopList();
-      setBusStatus("정류장을 저장했습니다.");
+      statusMessage = "정류장을 저장했습니다.";
     }
 
-    pendingStopDraft = null;
-    pendingStopAction = null;
-    replaceStopId = null;
-    replacePhotoId = null;
-    pendingPhotoLabelEditId = null;
-    pendingNewStopName = null;
-    photoLabelDialog?.close();
+    if (photoLabelHelp) {
+      photoLabelHelp.textContent =
+        "버스 번호나 평일·주말처럼, 이 시간표 사진만 구분할 이름을 적어 주세요.";
+    }
+    if (statusMessage) setBusStatus(statusMessage);
   });
 }
 
@@ -571,10 +594,16 @@ let busStatusDialogBound = false;
 /** @param {string} text */
 function shouldBusStatusUseModal(text) {
   if (!text) return false;
+  if (document.querySelector("#photo-label-dialog")?.open) return false;
+  if (document.querySelector("#stop-name-dialog")?.open) return false;
   if (/…/.test(text) || /중입니다/.test(text)) return false;
   if (text.startsWith("이제 이 사진 애칭")) return false;
   if (text.startsWith("보정을 마쳤습니다")) return false;
   if (text === "이 사진 애칭(버스 번호 등)을 적어 주세요.") return false;
+  if (/했습니다[.!]?$/.test(text) || /했어요[.!]?$/.test(text)) return false;
+  if (text.includes("복사했습니다") || text.includes("공유했습니다")) return false;
+  if (text.includes("예전 링크") || text.includes("옛 링크")) return false;
+  if (text.includes("공유 링크")) return false;
   return true;
 }
 
@@ -980,7 +1009,12 @@ function displayPhotoLabel(photo, index) {
 function openPhotoLabelDialog(currentLabel) {
   const dialog = document.querySelector("#photo-label-dialog");
   const input = document.querySelector("#photo-label-input");
+  const help = document.querySelector("#photo-label-dialog-help");
   if (!dialog || !input) return;
+  if (help) {
+    help.textContent =
+      "버스 번호나 평일·주말처럼, 이 시간표 사진만 구분할 이름을 적어 주세요.";
+  }
   input.value = currentLabel || "";
   dialog.showModal();
   syncBusFormModalScrollLock();
@@ -1102,6 +1136,13 @@ function syncBusMainVisibility() {
 function setBusStatus(message) {
   const text = message || "";
   const useModal = shouldBusStatusUseModal(text);
+  if (useModal) {
+    for (const id of ["photo-label-dialog", "stop-name-dialog"]) {
+      const dlg = document.querySelector(`#${id}`);
+      if (dlg?.open) dlg.close();
+    }
+    syncBusFormModalScrollLock();
+  }
   const statusDialog = document.querySelector("#bus-status-dialog");
 
   document.querySelectorAll(".bus-status").forEach((el) => {
@@ -1351,8 +1392,8 @@ function navigateBusRoute(route, { skipRoute = false } = {}) {
     const name = route.params?.get("n") || "";
     setBusStatus(
       name
-        ? `「${name}」은 예전 주소입니다. 보낸 분에게 「정류장 링크 공유」로 다시 보내 달라고 해 주세요.`
-        : "이 주소로는 시간표를 볼 수 없습니다. 공유 링크를 다시 받아 주세요."
+        ? `「${name}」은 예전 링크입니다. 보낸 분에게 「정류장 링크 공유」로 새 링크를 받아 주세요.`
+        : "옛 링크입니다. 「정류장 링크 공유」로 만든 새 주소를 열어 주세요."
     );
     activeStopId = null;
     activePhotoId = null;
@@ -1378,6 +1419,18 @@ function stopPayloadForLinkPublish(stop) {
 }
 
 async function publishStopShareLink(stop) {
+  try {
+    const statusRes = await fetch("/api/sync-status", { cache: "no-store" });
+    const status = await statusRes.json().catch(() => ({}));
+    if (statusRes.ok && status.linkTableReady === false) {
+      throw new Error(
+        "공유 링크 저장소가 아직 없습니다. 운영자에게 Supabase SQL(bus-link-share) 실행을 요청해 주세요."
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("공유 링크 저장소")) throw err;
+  }
+
   const res = await fetch("/api/link-publish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1388,7 +1441,9 @@ async function publishStopShareLink(stop) {
     const msg =
       data.error === "server_not_configured"
         ? "서버 설정이 없어 링크를 만들 수 없습니다."
-        : "공유 링크를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.";
+        : data.error === "insert_failed"
+          ? "공유 링크 저장에 실패했습니다. Supabase에 bus_link_shares 테이블이 있는지 확인해 주세요."
+          : "공유 링크를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.";
     throw new Error(msg);
   }
   if (!data.token) throw new Error("no_token");

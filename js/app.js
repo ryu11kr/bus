@@ -62,6 +62,7 @@ let pendingNewStopName = null;
 let replaceStopId = null;
 /** 사진 처리 중 — 자동 업데이트 새로고침 방지 */
 let photoPipelineBusy = false;
+let busRouteSync = true;
 
 /** 새 앱 로직은 이 함수에 넣으세요. */
 function initApp() {
@@ -75,7 +76,18 @@ function initApp() {
   bindPhotoViewer();
   bindSamsungPinchGuard();
   bindAppUpdateUi();
-  showListView();
+  bindBusHistory();
+  const initialRoute =
+    typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
+  busRouteSync = false;
+  if (initialRoute.view === "list" && !location.hash) {
+    showListView({ skipRoute: true });
+    commitBusRoute({ view: "list" }, { replace: true });
+  } else {
+    navigateBusRoute(initialRoute, { skipRoute: true });
+    commitBusRoute(initialRoute, { replace: true });
+  }
+  busRouteSync = true;
   updateInstallButtonVisibility();
   renderStopList();
 }
@@ -305,6 +317,7 @@ function bindBusUi() {
   const btnNewCamera = document.querySelector("#btn-new-camera");
   const btnNewAlbum = document.querySelector("#btn-new-album");
   const btnBack = document.querySelector("#btn-back-list");
+  const btnShareStop = document.querySelector("#btn-share-stop");
   const btnRename = document.querySelector("#btn-rename-stop");
   const btnAddCamera = document.querySelector("#btn-add-photo-camera");
   const btnAddAlbum = document.querySelector("#btn-add-photo-album");
@@ -331,11 +344,9 @@ function bindBusUi() {
     if (input) input.value = "";
     input?.click();
   });
-  btnBack?.addEventListener("click", () => {
-    activeStopId = null;
-    activePhotoId = null;
-    showListView();
-    setBusStatus("");
+  btnBack?.addEventListener("click", () => goBackOrList());
+  btnShareStop?.addEventListener("click", () => {
+    shareActiveStopLink().catch(() => {});
   });
 
   btnRename?.addEventListener("click", () => {
@@ -1269,10 +1280,105 @@ function collapseListPanelDetails() {
   });
 }
 
-function showListView() {
+function commitBusRoute(route, { replace = false } = {}) {
+  if (!busRouteSync || !window.busRoutes?.hash) return;
+  const hash = window.busRoutes.hash(route);
+  const url = `${location.pathname}${location.search}${hash}`;
+  if (!replace && location.hash === hash) return;
+  if (replace) {
+    history.replaceState({ busRoute: route }, "", url);
+  } else {
+    history.pushState({ busRoute: route }, "", url);
+  }
+}
+
+function bindBusHistory() {
+  window.addEventListener("popstate", () => {
+    busRouteSync = false;
+    const route =
+      typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
+    navigateBusRoute(route, { skipRoute: true });
+    busRouteSync = true;
+  });
+}
+
+function goBackOrList() {
+  if (location.hash && location.hash !== "#/") {
+    history.back();
+    return;
+  }
+  activeStopId = null;
+  activePhotoId = null;
+  showListView({ replaceRoute: true });
+  setBusStatus("");
+}
+
+function navigateBusRoute(route, { skipRoute = false } = {}) {
+  if (!route || route.view === "list") {
+    activeStopId = null;
+    activePhotoId = null;
+    showListView({ skipRoute, replaceRoute: true });
+    return;
+  }
+  if (route.view === "stop" && route.id) {
+    const stop = busStops.find((s) => s.id === route.id);
+    if (stop) {
+      activeStopId = stop.id;
+      renderStopDetail(stop.id, { skipRoute });
+      return;
+    }
+    const name = route.params?.get("n") || "";
+    setBusStatus(
+      name
+        ? `「${name}」 정류장이 이 기기에 없습니다. 구글 공유로 받았는지 확인해 주세요.`
+        : "저장된 정류장을 찾을 수 없습니다."
+    );
+    activeStopId = null;
+    activePhotoId = null;
+    showListView({ skipRoute, replaceRoute: true });
+  }
+}
+
+async function shareActiveStopLink() {
+  const stop = getActiveStop();
+  if (!stop || !window.busRoutes?.buildSharedStopUrl) return;
+  const url = window.busRoutes.buildSharedStopUrl(stop, getAppPublicShareUrl());
+  const title = `내버스시간표 — ${stop.name}`;
+  const text = `${stop.name} 버스 시간표`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title, text, url });
+      return;
+    }
+  } catch (err) {
+    if (err?.name === "AbortError") return;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setBusStatus("정류장 링크를 복사했습니다. 카톡 등에 붙여 넣으세요.");
+  } catch {
+    setBusStatus("링크 복사에 실패했습니다.");
+  }
+}
+
+function showListView(opts = {}) {
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
   document.querySelector("#view-app-share")?.setAttribute("hidden", "");
+  if (!opts.skipRoute) {
+    commitBusRoute({ view: "list" }, { replace: Boolean(opts.replaceRoute) });
+  }
 }
 
 function showDetailView() {
@@ -1419,16 +1525,16 @@ function renderStopList() {
 }
 
 
-function renderStopDetail(stopId) {
+function renderStopDetail(stopId, opts = {}) {
   const stop = busStops.find((s) => s.id === stopId);
   if (!stop) {
-    showListView();
+    showListView({ replaceRoute: true });
     return;
   }
 
   const photos = getStopPhotos(stop);
   if (!photos.length) {
-    showListView();
+    showListView({ replaceRoute: true });
     return;
   }
 
@@ -1520,6 +1626,11 @@ function renderStopDetail(stopId) {
   }
 
   setBusStatus("");
+  if (!opts.skipRoute) {
+    const q = new URLSearchParams();
+    if (stop.name) q.set("n", stop.name);
+    commitBusRoute({ view: "stop", id: stopId, params: q });
+  }
 }
 
 function formatStopDate(iso) {

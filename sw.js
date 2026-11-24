@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./offline.html",
   "./css/styles.css",
   "./js/stop-photos.js",
+  "./js/bus-routes.js",
   "./js/app.js",
   "./js/cloud-sync.js",
   "./js/cloud-sync-data.js",

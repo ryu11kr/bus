@@ -1315,6 +1315,33 @@ footer {
   display: none !important;
 }
 
+body.bus-link-share-page .app-name,
+body.bus-link-share-page .app-guide,
+body.bus-link-share-page .app-home-divider,
+body.bus-link-share-page #app-update-banner {
+  display: none !important;
+}
+
+body.bus-link-share-page .wrap.bus-wrap {
+  padding-top: 0.75rem;
+}
+
+body.bus-link-share-page .detail-stop-name {
+  margin-top: 0;
+  font-size: clamp(1.45rem, 5.5vw, 1.85rem);
+}
+
+.detail-photo-card-hint--share {
+  margin: 0.85rem 0 0.35rem;
+  padding: 0.35rem 0.25rem;
+  font-size: clamp(1.32rem, 5.2vw, 1.62rem);
+  font-weight: 800;
+  text-align: center;
+  color: #0f172a;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+}
+
 .view-list .section-heading {
   margin-top: 0;
   margin-bottom: 0.5rem;

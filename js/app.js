@@ -1278,6 +1278,7 @@ function isBusLinkShareView() {
 }
 
 function syncDetailReadOnly(readOnly) {
+  document.body.classList.toggle("bus-link-share-page", readOnly);
   const detail = document.querySelector("#view-detail");
   if (detail) detail.classList.toggle("detail-readonly", readOnly);
   const actions = document.querySelector("#detail-actions");
@@ -1539,6 +1540,7 @@ async function shareActiveStopLink() {
 
 function showListView(opts = {}) {
   linkViewStop = null;
+  syncDetailReadOnly(false);
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
   document.querySelector("#view-app-share")?.setAttribute("hidden", "");
@@ -1730,10 +1732,14 @@ function renderStopDetailForStop(stop, opts = {}) {
 
   if (title) title.textContent = stop.name;
   if (meta) {
-    const count = photos.length;
-    meta.textContent = readOnly
-      ? `사진 ${count}장 · 공유 링크로 보기`
-      : `사진 ${count}장 · 마지막 저장: ${formatStopDate(stop.updatedAt)}`;
+    if (readOnly) {
+      meta.textContent = "";
+      meta.hidden = true;
+    } else {
+      meta.hidden = false;
+      const count = photos.length;
+      meta.textContent = `사진 ${count}장 · 마지막 저장: ${formatStopDate(stop.updatedAt)}`;
+    }
   }
 
   if (list) {
@@ -1767,7 +1773,17 @@ function renderStopDetailForStop(stop, opts = {}) {
         }
       });
 
-      if (!readOnly) {
+      if (readOnly) {
+        if (hasLabel) {
+          li.append(labelTitle, hit);
+        } else {
+          li.append(hit);
+        }
+        const hint = document.createElement("p");
+        hint.className = "detail-photo-card-hint detail-photo-card-hint--share";
+        hint.textContent = "사진을 누르면 크게 볼 수 있습니다";
+        li.append(hint);
+      } else if (!readOnly) {
         const actions = document.createElement("div");
         actions.className = "detail-photo-card-actions";
 

@@ -1496,9 +1496,9 @@ async function publishStopShareLink(stop) {
 
 function showLinkLoadingView(message) {
   document.body.classList.add("bus-link-loading");
-  $("#view-list")?.setAttribute("hidden", "");
-  $("#view-detail")?.setAttribute("hidden", "");
-  $("#view-app-share")?.setAttribute("hidden", "");
+  document.querySelector("#view-list")?.setAttribute("hidden", "");
+  document.querySelector("#view-detail")?.setAttribute("hidden", "");
+  document.querySelector("#view-app-share")?.setAttribute("hidden", "");
   const panel = document.querySelector("#view-link-loading");
   const text = document.querySelector(".view-link-loading-text");
   if (text) text.textContent = message || "정류장 준비 중…";

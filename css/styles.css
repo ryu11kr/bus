@@ -1378,6 +1378,10 @@ body.bus-link-loading #view-app-share {
   display: none !important;
 }
 
+body.bus-link-loading #view-link-loading:not([hidden]) {
+  display: flex !important;
+}
+
 .view-list .section-heading {
   margin-top: 0;
   margin-bottom: 0.5rem;

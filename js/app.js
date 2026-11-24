@@ -1541,9 +1541,12 @@ async function shareActiveStopLink() {
 function showListView(opts = {}) {
   linkViewStop = null;
   syncDetailReadOnly(false);
+  activeStopId = null;
+  activePhotoId = null;
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
   document.querySelector("#view-app-share")?.setAttribute("hidden", "");
+  renderStopList();
   if (!opts.skipRoute) {
     commitBusRoute({ view: "list" }, { replace: Boolean(opts.replaceRoute) });
   }

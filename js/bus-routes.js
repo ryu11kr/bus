@@ -1,6 +1,6 @@
 /**
  * 해시(#) 라우팅 — 뒤로가기·정류장 공유 링크
- * #/ 목록 · #/stop/{id}?n=이름
+ * #/ 목록 · #/stop/{id} 내 기기 · #/l/{token} 공개 링크
  */
 (function (global) {
   function parseBusRoute() {
@@ -15,11 +15,17 @@
     if (!parts.length) return { view: "list" };
 
     const head = parts[0];
+    if (head === "l" && parts[1]) {
+      return { view: "link", token: decodeURIComponent(parts[1]) };
+    }
     if (head === "stop" && parts[1]) {
+      const params = new URLSearchParams(queryPart);
+      const linkToken = params.get("l") || params.get("t") || "";
       return {
         view: "stop",
         id: decodeURIComponent(parts[1]),
-        params: new URLSearchParams(queryPart),
+        params,
+        linkToken: linkToken.trim(),
       };
     }
 
@@ -28,6 +34,9 @@
 
   function busRouteHash(route) {
     if (!route || route.view === "list") return "#/";
+    if (route.view === "link" && route.token) {
+      return `#/l/${encodeURIComponent(route.token)}`;
+    }
     if (route.view === "stop" && route.id) {
       const q =
         route.params instanceof URLSearchParams
@@ -41,21 +50,16 @@
     return "#/";
   }
 
-  function buildSharedStopUrl(stop, baseHref) {
+  function buildLinkUrl(token, baseHref) {
     const u = new URL(baseHref || location.href);
     u.search = "";
-    const q = new URLSearchParams();
-    if (stop?.name) q.set("n", String(stop.name));
-    const qs = q.toString();
-    u.hash = qs
-      ? `/stop/${encodeURIComponent(stop.id)}?${qs}`
-      : `/stop/${encodeURIComponent(stop.id)}`;
+    u.hash = `/l/${encodeURIComponent(token)}`;
     return u.href;
   }
 
   global.busRoutes = {
     parse: parseBusRoute,
     hash: busRouteHash,
-    buildSharedStopUrl,
+    buildLinkUrl,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -63,6 +63,8 @@ let replaceStopId = null;
 /** 사진 처리 중 — 자동 업데이트 새로고침 방지 */
 let photoPipelineBusy = false;
 let busRouteSync = true;
+/** @type {BusStop | null} */
+let linkViewStop = null;
 
 /** 새 앱 로직은 이 함수에 넣으세요. */
 function initApp() {
@@ -1223,7 +1225,15 @@ function createStopFromDraft(draft, name, photoLabel) {
 }
 
 function getActiveStop() {
+  if (linkViewStop) return linkViewStop;
   return busStops.find((s) => s.id === activeStopId) || null;
+}
+
+function syncDetailReadOnly(readOnly) {
+  const grid = document.querySelector(".detail-actions-grid");
+  if (grid) grid.hidden = readOnly;
+  const shareBtn = document.querySelector("#btn-share-stop");
+  if (shareBtn) shareBtn.hidden = readOnly;
 }
 
 function beginReplacePhoto(stop, photoId) {
@@ -1309,6 +1319,7 @@ function goBackOrList() {
   }
   activeStopId = null;
   activePhotoId = null;
+  linkViewStop = null;
   showListView({ replaceRoute: true });
   setBusStatus("");
 }
@@ -1317,21 +1328,31 @@ function navigateBusRoute(route, { skipRoute = false } = {}) {
   if (!route || route.view === "list") {
     activeStopId = null;
     activePhotoId = null;
+    linkViewStop = null;
     showListView({ skipRoute, replaceRoute: true });
+    return;
+  }
+  if (route.view === "link" && route.token) {
+    openStopFromLinkToken(route.token, { skipRoute });
     return;
   }
   if (route.view === "stop" && route.id) {
     const stop = busStops.find((s) => s.id === route.id);
     if (stop) {
       activeStopId = stop.id;
+      linkViewStop = null;
       renderStopDetail(stop.id, { skipRoute });
+      return;
+    }
+    if (route.linkToken) {
+      openStopFromLinkToken(route.linkToken, { skipRoute });
       return;
     }
     const name = route.params?.get("n") || "";
     setBusStatus(
       name
-        ? `「${name}」 정류장이 이 기기에 없습니다. 구글 공유로 받았는지 확인해 주세요.`
-        : "저장된 정류장을 찾을 수 없습니다."
+        ? `「${name}」은 예전 주소입니다. 보낸 분에게 「정류장 링크 공유」로 다시 보내 달라고 해 주세요.`
+        : "이 주소로는 시간표를 볼 수 없습니다. 공유 링크를 다시 받아 주세요."
     );
     activeStopId = null;
     activePhotoId = null;
@@ -1339,15 +1360,91 @@ function navigateBusRoute(route, { skipRoute = false } = {}) {
   }
 }
 
+function stopPayloadForLinkPublish(stop) {
+  const photos = getStopPhotos(stop);
+  return {
+    id: stop.id,
+    name: stop.name,
+    updatedAt: stop.updatedAt,
+    photos: photos.map((p) => ({
+      id: p.id,
+      photoThumb: p.photoThumb,
+      label: p.label || "",
+      ocrText: p.ocrText || "",
+      sections: Array.isArray(p.sections) ? p.sections : [],
+      updatedAt: p.updatedAt || stop.updatedAt,
+    })),
+  };
+}
+
+async function publishStopShareLink(stop) {
+  const res = await fetch("/api/link-publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stop: stopPayloadForLinkPublish(stop) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      data.error === "server_not_configured"
+        ? "서버 설정이 없어 링크를 만들 수 없습니다."
+        : "공유 링크를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    throw new Error(msg);
+  }
+  if (!data.token) throw new Error("no_token");
+  return String(data.token);
+}
+
+async function openStopFromLinkToken(token, { skipRoute = false } = {}) {
+  if (!token) {
+    showListView({ replaceRoute: true });
+    return;
+  }
+  setBusStatus("정류장 불러오는 중…");
+  try {
+    const res = await fetch(`/api/link-open?token=${encodeURIComponent(token)}`, {
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.stop) {
+      throw new Error(data.error || "fetch_failed");
+    }
+    normalizeStopPhotos(data.stop);
+    linkViewStop = { ...data.stop, _linkView: true };
+    activeStopId = null;
+    activePhotoId = null;
+    renderStopDetailForStop(linkViewStop, { skipRoute, linkToken: token });
+    setBusStatus("");
+  } catch (err) {
+    linkViewStop = null;
+    setBusStatus(
+      err instanceof Error && err.message.includes("서버")
+        ? err.message
+        : "링크가 만료되었거나 찾을 수 없습니다."
+    );
+    showListView({ skipRoute, replaceRoute: true });
+  }
+}
+
 async function shareActiveStopLink() {
   const stop = getActiveStop();
-  if (!stop || !window.busRoutes?.buildSharedStopUrl) return;
-  const url = window.busRoutes.buildSharedStopUrl(stop, getAppPublicShareUrl());
+  if (!stop || !window.busRoutes?.buildLinkUrl) return;
+  setBusStatus("공유 링크 만드는 중…");
+  let token;
+  try {
+    token = await publishStopShareLink(stop);
+  } catch (err) {
+    setBusStatus(err instanceof Error ? err.message : "공유 링크를 만들지 못했습니다.");
+    return;
+  }
+  const url = window.busRoutes.buildLinkUrl(token, getAppPublicShareUrl());
   const title = `내버스시간표 — ${stop.name}`;
   const text = `${stop.name} 버스 시간표`;
+  setBusStatus("");
   try {
     if (navigator.share) {
       await navigator.share({ title, text, url });
+      setBusStatus("링크를 공유했습니다.");
       return;
     }
   } catch (err) {
@@ -1373,6 +1470,7 @@ async function shareActiveStopLink() {
 }
 
 function showListView(opts = {}) {
+  linkViewStop = null;
   document.querySelector("#view-list")?.removeAttribute("hidden");
   document.querySelector("#view-detail")?.setAttribute("hidden", "");
   document.querySelector("#view-app-share")?.setAttribute("hidden", "");
@@ -1531,6 +1629,15 @@ function renderStopDetail(stopId, opts = {}) {
     showListView({ replaceRoute: true });
     return;
   }
+  linkViewStop = null;
+  renderStopDetailForStop(stop, { ...opts, stopId });
+}
+
+function renderStopDetailForStop(stop, opts = {}) {
+  if (!stop) {
+    showListView({ replaceRoute: true });
+    return;
+  }
 
   const photos = getStopPhotos(stop);
   if (!photos.length) {
@@ -1538,11 +1645,17 @@ function renderStopDetail(stopId, opts = {}) {
     return;
   }
 
+  const readOnly = Boolean(stop._linkView);
+  if (!readOnly) {
+    activeStopId = stop.id;
+  }
+
   if (!activePhotoId || !photos.some((p) => p.id === activePhotoId)) {
     activePhotoId = photos[photos.length - 1].id;
   }
 
   showDetailView();
+  syncDetailReadOnly(readOnly);
   const title = document.querySelector("#detail-stop-name");
   const meta = document.querySelector("#detail-updated");
   const list = document.querySelector("#detail-photo-list");
@@ -1550,7 +1663,9 @@ function renderStopDetail(stopId, opts = {}) {
   if (title) title.textContent = stop.name;
   if (meta) {
     const count = photos.length;
-    meta.textContent = `사진 ${count}장 · 마지막 저장: ${formatStopDate(stop.updatedAt)}`;
+    meta.textContent = readOnly
+      ? `사진 ${count}장 · 공유 링크로 보기`
+      : `사진 ${count}장 · 마지막 저장: ${formatStopDate(stop.updatedAt)}`;
   }
 
   if (list) {
@@ -1584,52 +1699,60 @@ function renderStopDetail(stopId, opts = {}) {
         }
       });
 
-      const actions = document.createElement("div");
-      actions.className = "detail-photo-card-actions";
+      if (!readOnly) {
+        const actions = document.createElement("div");
+        actions.className = "detail-photo-card-actions";
 
-      const btnRenamePhoto = document.createElement("button");
-      btnRenamePhoto.type = "button";
-      btnRenamePhoto.className = "big-btn secondary detail-photo-card-action";
-      btnRenamePhoto.textContent = "이 사진 이름 바꾸기";
-      btnRenamePhoto.addEventListener("click", () => {
-        pendingStopAction = "rename-photo-label";
-        pendingPhotoLabelEditId = p.id;
-        openPhotoLabelDialog(p.label || "");
-      });
+        const btnRenamePhoto = document.createElement("button");
+        btnRenamePhoto.type = "button";
+        btnRenamePhoto.className = "big-btn secondary detail-photo-card-action";
+        btnRenamePhoto.textContent = "이 사진 이름 바꾸기";
+        btnRenamePhoto.addEventListener("click", () => {
+          pendingStopAction = "rename-photo-label";
+          pendingPhotoLabelEditId = p.id;
+          openPhotoLabelDialog(p.label || "");
+        });
 
-      const btnViewLarge = document.createElement("button");
-      btnViewLarge.type = "button";
-      btnViewLarge.className = "big-btn primary detail-photo-card-action";
-      btnViewLarge.textContent = "이 사진 크게보기";
-      btnViewLarge.addEventListener("click", () => {
-        if (typeof window.busAppOpenPhotoViewer === "function") {
-          window.busAppOpenPhotoViewer(p);
-        }
-      });
+        const btnViewLarge = document.createElement("button");
+        btnViewLarge.type = "button";
+        btnViewLarge.className = "big-btn primary detail-photo-card-action";
+        btnViewLarge.textContent = "이 사진 크게보기";
+        btnViewLarge.addEventListener("click", () => {
+          if (typeof window.busAppOpenPhotoViewer === "function") {
+            window.busAppOpenPhotoViewer(p);
+          }
+        });
 
-      const btnDeletePhoto = document.createElement("button");
-      btnDeletePhoto.type = "button";
-      btnDeletePhoto.className = "big-btn ghost danger-text detail-photo-card-action";
-      btnDeletePhoto.textContent = "이 사진 삭제";
-      btnDeletePhoto.addEventListener("click", () => deletePhotoFromStop(stop, p.id));
+        const btnDeletePhoto = document.createElement("button");
+        btnDeletePhoto.type = "button";
+        btnDeletePhoto.className = "big-btn ghost danger-text detail-photo-card-action";
+        btnDeletePhoto.textContent = "이 사진 삭제";
+        btnDeletePhoto.addEventListener("click", () => deletePhotoFromStop(stop, p.id));
 
-      const btnReplace = document.createElement("button");
-      btnReplace.type = "button";
-      btnReplace.className = "big-btn secondary detail-photo-card-action";
-      btnReplace.textContent = "이 사진 다시 찍기";
-      btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
+        const btnReplace = document.createElement("button");
+        btnReplace.type = "button";
+        btnReplace.className = "big-btn secondary detail-photo-card-action";
+        btnReplace.textContent = "이 사진 다시 찍기";
+        btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
 
-      actions.append(btnRenamePhoto, btnViewLarge, btnDeletePhoto, btnReplace);
-      li.append(labelTitle, hit, actions);
+        actions.append(btnRenamePhoto, btnViewLarge, btnDeletePhoto, btnReplace);
+        li.append(labelTitle, hit, actions);
+      } else {
+        li.append(labelTitle, hit);
+      }
       list.append(li);
     });
   }
 
   setBusStatus("");
   if (!opts.skipRoute) {
-    const q = new URLSearchParams();
-    if (stop.name) q.set("n", stop.name);
-    commitBusRoute({ view: "stop", id: stopId, params: q });
+    if (opts.linkToken) {
+      commitBusRoute({ view: "link", token: opts.linkToken });
+    } else {
+      const q = new URLSearchParams();
+      if (stop.name) q.set("n", stop.name);
+      commitBusRoute({ view: "stop", id: stop.id, params: q });
+    }
   }
 }
 

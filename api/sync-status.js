@@ -21,9 +21,12 @@ export default async function handler(req, res) {
   const admin = await getAdminClient();
 
   let shareTableReady = false;
+  let linkTableReady = false;
   if (admin) {
     const { error } = await admin.from("bus_share_requests").select("id").limit(1);
     shareTableReady = !error;
+    const { error: linkErr } = await admin.from("bus_link_shares").select("token").limit(1);
+    linkTableReady = !linkErr;
   }
 
   return res.status(200).json({
@@ -32,6 +35,7 @@ export default async function handler(req, res) {
     hasAnonKey: Boolean(supabaseAnonKey),
     hasServiceRole,
     shareTableReady,
+    linkTableReady,
     acceptNeedsServiceRole: true,
   });
 }

@@ -1310,6 +1310,11 @@ footer {
   font-size: clamp(1.28rem, 4.5vw, 1.45rem);
 }
 
+.view-detail.detail-readonly .detail-actions,
+.view-detail.detail-readonly #detail-actions {
+  display: none !important;
+}
+
 .view-list .section-heading {
   margin-top: 0;
   margin-bottom: 0.5rem;

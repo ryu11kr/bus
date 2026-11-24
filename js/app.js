@@ -1270,11 +1270,24 @@ function getActiveStop() {
   return busStops.find((s) => s.id === activeStopId) || null;
 }
 
+function isBusLinkShareView() {
+  if (linkViewStop) return true;
+  const route =
+    typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : null;
+  return route?.view === "link";
+}
+
 function syncDetailReadOnly(readOnly) {
+  const detail = document.querySelector("#view-detail");
+  if (detail) detail.classList.toggle("detail-readonly", readOnly);
+  const actions = document.querySelector("#detail-actions");
+  if (actions) actions.hidden = readOnly;
   const grid = document.querySelector(".detail-actions-grid");
   if (grid) grid.hidden = readOnly;
   const shareBtn = document.querySelector("#btn-share-stop");
   if (shareBtn) shareBtn.hidden = readOnly;
+  const backBtn = document.querySelector("#btn-back-list");
+  if (backBtn) backBtn.hidden = readOnly;
 }
 
 function beginReplacePhoto(stop, photoId) {
@@ -1700,7 +1713,7 @@ function renderStopDetailForStop(stop, opts = {}) {
     return;
   }
 
-  const readOnly = Boolean(stop._linkView);
+  const readOnly = Boolean(stop._linkView) || isBusLinkShareView();
   if (!readOnly) {
     activeStopId = stop.id;
   }

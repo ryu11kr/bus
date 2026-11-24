@@ -1415,6 +1415,42 @@ function navigateBusRoute(route, { skipRoute = false } = {}) {
   }
 }
 
+const BUS_LINK_TOKEN_CACHE_KEY = "bus-link-token-by-stop-v1";
+
+function readStopLinkTokenCache() {
+  try {
+    const raw = localStorage.getItem(BUS_LINK_TOKEN_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function stopLinkCacheKey(stop) {
+  return `${stop.id}|${stop.updatedAt || ""}`;
+}
+
+function rememberStopLinkToken(stop, token) {
+  if (!stop?.id || !token) return;
+  const cache = readStopLinkTokenCache();
+  cache[stopLinkCacheKey(stop)] = String(token);
+  const keys = Object.keys(cache);
+  const trim = keys.length > 40 ? keys.slice(-40) : keys;
+  const next = {};
+  for (const k of trim) next[k] = cache[k];
+  try {
+    localStorage.setItem(BUS_LINK_TOKEN_CACHE_KEY, JSON.stringify(next));
+  } catch {
+    /* quota */
+  }
+}
+
+function cachedStopLinkToken(stop) {
+  if (!stop?.id) return null;
+  const hit = readStopLinkTokenCache()[stopLinkCacheKey(stop)];
+  return hit ? String(hit) : null;
+}
+
 function stopPayloadForLinkPublish(stop) {
   const photos = getStopPhotos(stop);
   return {
@@ -1433,18 +1469,6 @@ function stopPayloadForLinkPublish(stop) {
 }
 
 async function publishStopShareLink(stop) {
-  try {
-    const statusRes = await fetch("/api/sync-status", { cache: "no-store" });
-    const status = await statusRes.json().catch(() => ({}));
-    if (statusRes.ok && status.linkTableReady === false) {
-      throw new Error(
-        "공유 링크 저장소가 아직 없습니다. 운영자에게 Supabase SQL(bus-link-share) 실행을 요청해 주세요."
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("공유 링크 저장소")) throw err;
-  }
-
   const res = await fetch("/api/link-publish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1498,14 +1522,18 @@ async function openStopFromLinkToken(token, { skipRoute = false } = {}) {
 async function shareActiveStopLink() {
   const stop = getActiveStop();
   if (!stop || !window.busRoutes?.buildLinkUrl) return;
-  setBusStatus("공유 링크 만드는 중…");
-  let token;
-  try {
-    token = await publishStopShareLink(stop);
-  } catch (err) {
-    setBusStatus(err instanceof Error ? err.message : "공유 링크를 만들지 못했습니다.");
-    return;
+  let token = cachedStopLinkToken(stop);
+  if (!token) {
+    setBusStatus("공유 링크 만드는 중… (시간표 사진을 서버에 올리는 중)");
+    try {
+      token = await publishStopShareLink(stop);
+      rememberStopLinkToken(stop, token);
+    } catch (err) {
+      setBusStatus(err instanceof Error ? err.message : "공유 링크를 만들지 못했습니다.");
+      return;
+    }
   }
+  setBusStatus("");
   const url = window.busRoutes.buildLinkUrl(token, getAppPublicShareUrl());
   const title = `내버스시간표 — ${stop.name}`;
   const text = `${stop.name} 버스 시간표`;

@@ -85,13 +85,18 @@ function initApp() {
   if (initialRoute.view === "list" && !location.hash) {
     showListView({ skipRoute: true });
     commitBusRoute({ view: "list" }, { replace: true });
+    renderStopList();
+  } else if (initialRoute.view === "link" && initialRoute.token) {
+    showLinkLoadingView();
+    navigateBusRoute(initialRoute, { skipRoute: true });
+    commitBusRoute(initialRoute, { replace: true });
   } else {
     navigateBusRoute(initialRoute, { skipRoute: true });
     commitBusRoute(initialRoute, { replace: true });
+    if (initialRoute.view === "list") renderStopList();
   }
   busRouteSync = true;
   updateInstallButtonVisibility();
-  renderStopList();
 }
 
 const APP_VERSION_SEEN_KEY = "bus-app-version-seen-build";
@@ -1388,6 +1393,7 @@ function navigateBusRoute(route, { skipRoute = false } = {}) {
     return;
   }
   if (route.view === "link" && route.token) {
+    showLinkLoadingView();
     openStopFromLinkToken(route.token, { skipRoute });
     return;
   }
@@ -1488,12 +1494,30 @@ async function publishStopShareLink(stop) {
   return String(data.token);
 }
 
+function showLinkLoadingView(message) {
+  document.body.classList.add("bus-link-loading");
+  $("#view-list")?.setAttribute("hidden", "");
+  $("#view-detail")?.setAttribute("hidden", "");
+  $("#view-app-share")?.setAttribute("hidden", "");
+  const panel = document.querySelector("#view-link-loading");
+  const text = document.querySelector(".view-link-loading-text");
+  if (text) text.textContent = message || "정류장 준비 중…";
+  panel?.removeAttribute("hidden");
+}
+
+function hideLinkLoadingView() {
+  document.body.classList.remove("bus-link-loading");
+  document.querySelector("#view-link-loading")?.setAttribute("hidden", "");
+}
+
 async function openStopFromLinkToken(token, { skipRoute = false } = {}) {
   if (!token) {
+    hideLinkLoadingView();
     showListView({ replaceRoute: true });
     return;
   }
-  setBusStatus("정류장 불러오는 중…");
+  showLinkLoadingView();
+  setBusStatus("");
   try {
     const res = await fetch(`/api/link-open?token=${encodeURIComponent(token)}`, {
       cache: "no-store",
@@ -1506,9 +1530,11 @@ async function openStopFromLinkToken(token, { skipRoute = false } = {}) {
     linkViewStop = { ...data.stop, _linkView: true };
     activeStopId = null;
     activePhotoId = null;
+    hideLinkLoadingView();
     renderStopDetailForStop(linkViewStop, { skipRoute, linkToken: token });
     setBusStatus("");
   } catch (err) {
+    hideLinkLoadingView();
     linkViewStop = null;
     setBusStatus(
       err instanceof Error && err.message.includes("서버")

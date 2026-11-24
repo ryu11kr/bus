@@ -1332,14 +1332,50 @@ body.bus-link-share-page .detail-stop-name {
 }
 
 .detail-photo-card-hint--share {
-  margin: 0.85rem 0 0.35rem;
-  padding: 0.35rem 0.25rem;
-  font-size: clamp(1.32rem, 5.2vw, 1.62rem);
+  box-sizing: border-box;
+  width: calc(100% - 0.5rem);
+  max-width: 100%;
+  margin: 0.65rem auto 0.15rem;
+  padding: 0.55rem 0.65rem;
+  font-size: clamp(1.15rem, 4.2vw, 1.4rem);
   font-weight: 800;
   text-align: center;
-  color: #0f172a;
-  line-height: 1.45;
+  color: var(--brand-ink);
+  line-height: 1.35;
   letter-spacing: -0.02em;
+  word-break: keep-all;
+}
+
+body.bus-link-loading .app-name,
+body.bus-link-loading .app-guide,
+body.bus-link-loading .app-home-divider,
+body.bus-link-loading #app-update-banner,
+body.bus-link-loading #view-list,
+body.bus-link-loading #view-detail,
+body.bus-link-loading #view-app-share {
+  display: none !important;
+}
+
+.view-link-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(70vh, 520px);
+  margin: 0;
+  padding: 2rem 1.25rem;
+}
+
+.view-link-loading-text {
+  margin: 0;
+  font-size: clamp(1.35rem, 5vw, 1.75rem);
+  font-weight: 800;
+  text-align: center;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.view-link-loading[hidden] {
+  display: none !important;
 }
 
 .view-list .section-heading {

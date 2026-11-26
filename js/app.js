@@ -1362,8 +1362,17 @@ function commitBusRoute(route, { replace = false } = {}) {
   }
 }
 
-function bindBusHistory() {
-  window.addEventListener("popstate", () => {
+function closePhotoViewerIfOpen() {
+  const dialog = document.querySelector("#photo-viewer");
+  if (dialog?.open) dialog.close();
+}
+
+let busHistoryHandlerGeneration = 0;
+
+function applyBusLocationRoute() {
+  const generation = ++busHistoryHandlerGeneration;
+  queueMicrotask(() => {
+    if (generation !== busHistoryHandlerGeneration) return;
     busRouteSync = false;
     const route =
       typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
@@ -1372,8 +1381,15 @@ function bindBusHistory() {
   });
 }
 
+function bindBusHistory() {
+  window.addEventListener("popstate", applyBusLocationRoute);
+  window.addEventListener("hashchange", applyBusLocationRoute);
+}
+
 function goBackOrList() {
-  if (location.hash && location.hash !== "#/") {
+  const route =
+    typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
+  if (window.busRoutes?.isSubView?.(route)) {
     history.back();
     return;
   }
@@ -1385,6 +1401,7 @@ function goBackOrList() {
 }
 
 function navigateBusRoute(route, { skipRoute = false } = {}) {
+  closePhotoViewerIfOpen();
   if (!route || route.view === "list") {
     activeStopId = null;
     activePhotoId = null;

@@ -57,9 +57,15 @@
     return u.href;
   }
 
+  function isSubView(route) {
+    if (!route) return false;
+    return route.view === "stop" || route.view === "link";
+  }
+
   global.busRoutes = {
     parse: parseBusRoute,
     hash: busRouteHash,
     buildLinkUrl,
+    isSubView,
   };
 })(typeof window !== "undefined" ? window : globalThis);

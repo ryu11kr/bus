@@ -79,21 +79,25 @@ function initApp() {
   bindSamsungPinchGuard();
   bindAppUpdateUi();
   bindBusHistory();
+  try {
+    const restore = sessionStorage.getItem("bus-spa-restore");
+    if (restore && restore !== "/" && !location.pathname.replace(/\/$/, "")) {
+      sessionStorage.removeItem("bus-spa-restore");
+      history.replaceState(null, "", restore);
+    }
+  } catch {
+    /* ignore */
+  }
   const initialRoute =
     typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
   busRouteSync = false;
-  if (initialRoute.view === "list" && !location.hash) {
-    showListView({ skipRoute: true });
-    commitBusRoute({ view: "list" }, { replace: true });
+  navigateBusRoute(initialRoute, { skipRoute: true });
+  if (initialRoute.view === "list") {
+    commitBusRoute(initialRoute, { replace: true });
     renderStopList();
-  } else if (initialRoute.view === "link" && initialRoute.token) {
-    showLinkLoadingView();
-    navigateBusRoute(initialRoute, { skipRoute: true });
-    commitBusRoute(initialRoute, { replace: true });
   } else {
-    navigateBusRoute(initialRoute, { skipRoute: true });
-    commitBusRoute(initialRoute, { replace: true });
-    if (initialRoute.view === "list") renderStopList();
+    history.replaceState({ busRoute: { view: "list" } }, "", "/");
+    commitBusRoute(initialRoute, { replace: false });
   }
   busRouteSync = true;
   updateInstallButtonVisibility();
@@ -1351,14 +1355,24 @@ function collapseListPanelDetails() {
 }
 
 function commitBusRoute(route, { replace = false } = {}) {
-  if (!busRouteSync || !window.busRoutes?.hash) return;
-  const hash = window.busRoutes.hash(route);
-  const url = `${location.pathname}${location.search}${hash}`;
-  if (!replace && location.hash === hash) return;
+  if (!busRouteSync || !window.busRoutes?.path) return;
+  const path = window.busRoutes.path(route);
+  const current =
+    typeof window.busRoutes.locationRouteKey === "function"
+      ? window.busRoutes.locationRouteKey()
+      : `${location.pathname}${location.search}`;
+  if (!replace && current === path) return;
+  if (
+    replace &&
+    current === path &&
+    !(window.busRoutes.usesLegacyHash && window.busRoutes.usesLegacyHash())
+  ) {
+    return;
+  }
   if (replace) {
-    history.replaceState({ busRoute: route }, "", url);
+    history.replaceState({ busRoute: route }, "", path);
   } else {
-    history.pushState({ busRoute: route }, "", url);
+    history.pushState({ busRoute: route }, "", path);
   }
 }
 
@@ -1367,12 +1381,8 @@ function closePhotoViewerIfOpen() {
   if (dialog?.open) dialog.close();
 }
 
-let busHistoryHandlerGeneration = 0;
-
-function applyBusLocationRoute() {
-  const generation = ++busHistoryHandlerGeneration;
-  queueMicrotask(() => {
-    if (generation !== busHistoryHandlerGeneration) return;
+function bindBusHistory() {
+  window.addEventListener("popstate", () => {
     busRouteSync = false;
     const route =
       typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
@@ -1381,16 +1391,19 @@ function applyBusLocationRoute() {
   });
 }
 
-function bindBusHistory() {
-  window.addEventListener("popstate", applyBusLocationRoute);
-  window.addEventListener("hashchange", applyBusLocationRoute);
-}
-
 function goBackOrList() {
   const route =
     typeof window.busRoutes?.parse === "function" ? window.busRoutes.parse() : { view: "list" };
   if (window.busRoutes?.isSubView?.(route)) {
-    history.back();
+    if (window.history.length > 1) {
+      history.back();
+      return;
+    }
+    activeStopId = null;
+    activePhotoId = null;
+    linkViewStop = null;
+    showListView({ replaceRoute: true });
+    setBusStatus("");
     return;
   }
   activeStopId = null;

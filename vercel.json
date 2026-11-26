@@ -7,7 +7,9 @@
     {
       "source": "/api/share-status",
       "destination": "/api/sync-status"
-    }
+    },
+    { "source": "/stop/:path*", "destination": "/index.html" },
+    { "source": "/l/:token", "destination": "/index.html" }
   ],
   "headers": [
     {

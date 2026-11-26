@@ -1354,6 +1354,21 @@ function collapseListPanelDetails() {
   });
 }
 
+function busRouteHistoryState(route) {
+  if (!route || route.view === "list") return { view: "list" };
+  if (route.view === "link" && route.token) {
+    return { view: "link", token: String(route.token) };
+  }
+  if (route.view === "stop" && route.id) {
+    return {
+      view: "stop",
+      id: String(route.id),
+      linkToken: String(route.linkToken || ""),
+    };
+  }
+  return { view: "list" };
+}
+
 function commitBusRoute(route, { replace = false } = {}) {
   if (!busRouteSync || !window.busRoutes?.path) return;
   const path = window.busRoutes.path(route);
@@ -1369,10 +1384,15 @@ function commitBusRoute(route, { replace = false } = {}) {
   ) {
     return;
   }
-  if (replace) {
-    history.replaceState({ busRoute: route }, "", path);
-  } else {
-    history.pushState({ busRoute: route }, "", path);
+  const state = busRouteHistoryState(route);
+  try {
+    if (replace) {
+      history.replaceState({ busRoute: state }, "", path);
+    } else {
+      history.pushState({ busRoute: state }, "", path);
+    }
+  } catch (err) {
+    console.error(err);
   }
 }
 

@@ -671,7 +671,8 @@ function bindPhotoViewer() {
   const btnZoomOut = document.querySelector("#photo-viewer-zoom-out");
   if (!dialog || !stage || !pan || !img) return;
 
-  const MAX_USER_ZOOM = 3;
+  /** 화면 맞춤 이후 추가 배율 (핀치·「더 크게」 공통) */
+  const MAX_USER_ZOOM = 8;
 
   let fitScale = 1;
   let userZoom = 1;
@@ -721,8 +722,10 @@ function bindPhotoViewer() {
 
   function updateViewerZoomButtons() {
     const atFit = userZoom <= 1.01;
+    const atMax = userZoom >= MAX_USER_ZOOM - 0.02;
     if (btnZoomOut) btnZoomOut.disabled = atFit;
     if (btnFit) btnFit.disabled = atFit;
+    if (btnZoomIn) btnZoomIn.disabled = atMax;
   }
 
   function setZoomFit() {
@@ -742,7 +745,7 @@ function bindPhotoViewer() {
   }
 
   function zoomInStep() {
-    userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.35);
+    userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.5);
     applyViewerTransform();
     stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
   }

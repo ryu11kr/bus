@@ -600,7 +600,10 @@ function bindBusFormModalScrollLock() {
 
 let busStatusDialogBound = false;
 
-/** @param {string} text */
+/**
+ * 진행·이름/애칭 입력 단계는 인라인(.bus-status), 그 외 안내·완료·오류는 팝업(#bus-status-dialog).
+ * @param {string} text
+ */
 function shouldBusStatusUseModal(text) {
   if (!text) return false;
   if (document.querySelector("#photo-label-dialog")?.open) return false;
@@ -609,10 +612,6 @@ function shouldBusStatusUseModal(text) {
   if (text.startsWith("이제 이 사진 애칭")) return false;
   if (text.startsWith("보정을 마쳤습니다")) return false;
   if (text === "이 사진 애칭(버스 번호 등)을 적어 주세요.") return false;
-  if (/했습니다[.!]?$/.test(text) || /했어요[.!]?$/.test(text)) return false;
-  if (text.includes("복사했습니다") || text.includes("공유했습니다")) return false;
-  if (text.includes("예전 링크") || text.includes("옛 링크")) return false;
-  if (text.includes("공유 링크")) return false;
   return true;
 }
 

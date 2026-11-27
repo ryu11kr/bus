@@ -922,6 +922,32 @@ footer {
   font-size: 1.28rem;
   font-weight: 800;
   line-height: 1.45;
+  white-space: pre-line;
+}
+
+.bus-share-busy-progress {
+  height: 0.45rem;
+  margin-top: 1.1rem;
+  overflow: hidden;
+  background: #e8e8e8;
+  border-radius: 999px;
+}
+
+.bus-share-busy-progress-bar {
+  width: 42%;
+  height: 100%;
+  background: var(--brand, #f97316);
+  border-radius: 999px;
+  animation: bus-share-progress-slide 1.25s ease-in-out infinite;
+}
+
+@keyframes bus-share-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .bus-share-busy-spinner {

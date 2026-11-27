@@ -1594,21 +1594,47 @@ async function openStopFromLinkToken(token, { skipRoute = false } = {}) {
   }
 }
 
+let linkShareBusyActive = false;
+
+/** @param {string} message */
+function showLinkShareBusy(message) {
+  linkShareBusyActive = true;
+  setBusStatus("");
+  const overlay = document.querySelector("#bus-share-busy");
+  const textEl = document.querySelector("#bus-share-busy-text");
+  if (overlay && textEl) {
+    textEl.textContent = message;
+    overlay.hidden = false;
+    overlay.setAttribute("aria-busy", "true");
+  }
+}
+
+function hideLinkShareBusy() {
+  if (!linkShareBusyActive) return;
+  linkShareBusyActive = false;
+  const overlay = document.querySelector("#bus-share-busy");
+  if (overlay) {
+    overlay.hidden = true;
+    overlay.setAttribute("aria-busy", "false");
+  }
+}
+
 async function shareActiveStopLink() {
   const stop = getActiveStop();
   if (!stop || !window.busRoutes?.buildLinkUrl) return;
   let token = cachedStopLinkToken(stop);
   if (!token) {
-    setBusStatus("공유 링크 만드는 중… (시간표 사진을 서버에 올리는 중)");
+    showLinkShareBusy("공유 링크 만드는 중…\n(시간표 사진을 서버에 올리는 중)");
     try {
       token = await publishStopShareLink(stop);
       rememberStopLinkToken(stop, token);
     } catch (err) {
       setBusStatus(err instanceof Error ? err.message : "공유 링크를 만들지 못했습니다.");
       return;
+    } finally {
+      hideLinkShareBusy();
     }
   }
-  setBusStatus("");
   const url = window.busRoutes.buildLinkUrl(token, getAppPublicShareUrl());
   const title = `내버스시간표 — ${stop.name}`;
   const text = `${stop.name} 버스 시간표`;
@@ -1616,7 +1642,6 @@ async function shareActiveStopLink() {
   try {
     if (navigator.share) {
       await navigator.share({ title, text, url });
-      setBusStatus("링크를 공유했습니다.");
       return;
     }
   } catch (err) {

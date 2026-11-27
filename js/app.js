@@ -420,6 +420,7 @@ function bindBusUi() {
         saveBusState();
         renderStopDetail(stop.id);
         renderStopList();
+        nameDialog?.close();
         setBusStatus("이름을 바꿨습니다.");
       }
     } else if (pendingStopAction === "new" && pendingStopDraft) {
@@ -606,6 +607,7 @@ let busStatusDialogBound = false;
  */
 function shouldBusStatusUseModal(text) {
   if (!text) return false;
+  if (text === "이름을 바꿨습니다.") return true;
   if (document.querySelector("#photo-label-dialog")?.open) return false;
   if (document.querySelector("#stop-name-dialog")?.open) return false;
   if (/…/.test(text) || /중입니다/.test(text)) return false;

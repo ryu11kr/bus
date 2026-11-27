@@ -1293,12 +1293,44 @@ function syncDetailReadOnly(readOnly) {
   if (detail) detail.classList.toggle("detail-readonly", readOnly);
   const actions = document.querySelector("#detail-actions");
   if (actions) actions.hidden = readOnly;
-  const grid = document.querySelector(".detail-actions-grid");
-  if (grid) grid.hidden = readOnly;
-  const shareBtn = document.querySelector("#btn-share-stop");
-  if (shareBtn) shareBtn.hidden = readOnly;
   const backBtn = document.querySelector("#btn-back-list");
   if (backBtn) backBtn.hidden = readOnly;
+}
+
+const DETAIL_TILE_SVG = {
+  pencil:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  expand:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+  trash:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>',
+  camera:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
+};
+
+/**
+ * @param {string} labelHtml
+ * @param {{ icon?: keyof typeof DETAIL_TILE_SVG, danger?: boolean, accent?: boolean, className?: string, onClick?: () => void }} opts
+ */
+function createDetailTileButton(labelHtml, opts = {}) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "detail-tile-btn";
+  if (opts.className) btn.classList.add(opts.className);
+  if (opts.danger) btn.classList.add("detail-tile-btn--danger");
+  if (opts.accent) btn.classList.add("detail-tile-btn--accent");
+  const icon = document.createElement("span");
+  icon.className = "detail-tile-icon";
+  icon.setAttribute("aria-hidden", "true");
+  if (opts.icon && DETAIL_TILE_SVG[opts.icon]) {
+    icon.innerHTML = DETAIL_TILE_SVG[opts.icon];
+  }
+  const label = document.createElement("span");
+  label.className = "detail-tile-label";
+  label.innerHTML = labelHtml;
+  btn.append(icon, label);
+  if (opts.onClick) btn.addEventListener("click", opts.onClick);
+  return btn;
 }
 
 function beginReplacePhoto(stop, photoId) {
@@ -1920,39 +1952,51 @@ function renderStopDetailForStop(stop, opts = {}) {
         const actions = document.createElement("div");
         actions.className = "detail-photo-card-actions";
 
-        const btnRenamePhoto = document.createElement("button");
-        btnRenamePhoto.type = "button";
-        btnRenamePhoto.className = "big-btn secondary detail-photo-card-action";
-        btnRenamePhoto.textContent = "이 사진 이름 바꾸기";
-        btnRenamePhoto.addEventListener("click", () => {
-          pendingStopAction = "rename-photo-label";
-          pendingPhotoLabelEditId = p.id;
-          openPhotoLabelDialog(p.label || "");
+        const btnViewLarge = createDetailTileButton("이 사진<br />크게보기", {
+          icon: "expand",
+          accent: true,
+          className: "detail-tile-btn--span",
+          onClick: () => {
+            if (typeof window.busAppOpenPhotoViewer === "function") {
+              window.busAppOpenPhotoViewer(p);
+            }
+          },
         });
 
-        const btnViewLarge = document.createElement("button");
-        btnViewLarge.type = "button";
-        btnViewLarge.className = "big-btn primary detail-photo-card-action";
-        btnViewLarge.textContent = "이 사진 크게보기";
-        btnViewLarge.addEventListener("click", () => {
-          if (typeof window.busAppOpenPhotoViewer === "function") {
-            window.busAppOpenPhotoViewer(p);
-          }
+        const photoManage = document.createElement("details");
+        photoManage.className = "detail-fold detail-photo-manage";
+
+        const manageSummary = document.createElement("summary");
+        manageSummary.className = "detail-fold-summary";
+        manageSummary.textContent = "사진 관리";
+
+        const manageGrid = document.createElement("div");
+        manageGrid.className = "detail-fold-grid";
+
+        const btnRenamePhoto = createDetailTileButton("이 사진<br />이름 바꾸기", {
+          icon: "pencil",
+          onClick: () => {
+            pendingStopAction = "rename-photo-label";
+            pendingPhotoLabelEditId = p.id;
+            openPhotoLabelDialog(p.label || "");
+          },
         });
 
-        const btnDeletePhoto = document.createElement("button");
-        btnDeletePhoto.type = "button";
-        btnDeletePhoto.className = "big-btn ghost danger-text detail-photo-card-action";
-        btnDeletePhoto.textContent = "이 사진 삭제";
-        btnDeletePhoto.addEventListener("click", () => deletePhotoFromStop(stop, p.id));
+        const btnReplace = createDetailTileButton("이 사진<br />다시 찍기", {
+          icon: "camera",
+          onClick: () => beginReplacePhoto(stop, p.id),
+        });
 
-        const btnReplace = document.createElement("button");
-        btnReplace.type = "button";
-        btnReplace.className = "big-btn secondary detail-photo-card-action";
-        btnReplace.textContent = "이 사진 다시 찍기";
-        btnReplace.addEventListener("click", () => beginReplacePhoto(stop, p.id));
+        const btnDeletePhoto = createDetailTileButton("이 사진<br />삭제", {
+          icon: "trash",
+          danger: true,
+          className: "detail-tile-btn--span",
+          onClick: () => deletePhotoFromStop(stop, p.id),
+        });
 
-        actions.append(btnRenamePhoto, btnViewLarge, btnDeletePhoto, btnReplace);
+        manageGrid.append(btnRenamePhoto, btnReplace, btnDeletePhoto);
+        photoManage.append(manageSummary, manageGrid);
+        actions.append(btnViewLarge, photoManage);
         li.append(labelTitle, hit, actions);
       } else {
         li.append(labelTitle, hit);

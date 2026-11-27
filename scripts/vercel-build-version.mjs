@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const sha = process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`;
-const hex = sha.replace(/[^a-f0-9]/gi, "");
-const build = hex.length >= 8 ? parseInt(hex.slice(0, 8), 16) : Math.floor(Date.now() / 1000);
+/** 배포마다 항상 증가하는 빌드 번호(SHA 16진은 커밋마다 줄어들 수 있음). */
+const build = Math.floor(Date.now() / 1000);
 
 let cachePrefix = "bus-timetable";
 try {

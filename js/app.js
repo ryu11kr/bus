@@ -11,7 +11,8 @@ const displayState = document.querySelector("#display-state");
 const swState = document.querySelector("#sw-state");
 const swVersion = document.querySelector("#sw-version");
 
-let deferredPrompt = null;
+/** @type {BeforeInstallPromptEvent | null} */
+let deferredPrompt = window.__pwaDeferredInstall || null;
 let registration = null;
 let reloadOnControllerChange = false;
 let versionPollId = null;
@@ -2265,27 +2266,84 @@ function renderDisplayMode() {
   displayState.dataset.state = installed ? "installed" : "browser";
 }
 
+function onInstallPromptAvailable(event) {
+  deferredPrompt = event || window.__pwaDeferredInstall || null;
+  if (installBtn) installBtn.disabled = false;
+  updateInstallButtonVisibility();
+}
+
+function getManualInstallHint() {
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    return "아이폰: 하단 공유(↑) → '홈 화면에 추가'를 눌러 주세요.";
+  }
+  if (/SamsungBrowser/i.test(ua)) {
+    return "삼성 인터넷: 메뉴(≡) → '현재 페이지 추가' → '홈 화면'을 눌러 주세요.";
+  }
+  return "크롬·엣지: 메뉴(⋮) → '앱 설치' 또는 '홈 화면에 추가'를 눌러 주세요.";
+}
+
+async function waitForInstallPrompt(maxMs) {
+  if (deferredPrompt) return deferredPrompt;
+  if ("serviceWorker" in navigator) {
+    try {
+      await navigator.serviceWorker.ready;
+    } catch {
+      /* ignore */
+    }
+  }
+  const deadline = Date.now() + maxMs;
+  while (!deferredPrompt && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    if (window.__pwaDeferredInstall) {
+      onInstallPromptAvailable(window.__pwaDeferredInstall);
+    }
+  }
+  return deferredPrompt;
+}
+
+async function triggerPwaInstall() {
+  await waitForInstallPrompt(3500);
+  if (!deferredPrompt) return false;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  window.__pwaDeferredInstall = null;
+  if (outcome === "accepted") {
+    updateInstallButtonVisibility();
+    if (installBtn) installBtn.disabled = true;
+  } else if (installBtn) {
+    installBtn.disabled = false;
+  }
+  return outcome === "accepted";
+}
+
 function bindInstall() {
+  window.addEventListener("pwa-install-available", () => {
+    onInstallPromptAvailable(window.__pwaDeferredInstall);
+  });
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
-    deferredPrompt = event;
-    if (installBtn) {
-      installBtn.disabled = false;
-    }
-    updateInstallButtonVisibility();
+    window.__pwaDeferredInstall = event;
+    onInstallPromptAvailable(event);
   });
+  if (window.__pwaDeferredInstall) {
+    onInstallPromptAvailable(window.__pwaDeferredInstall);
+  }
 
   installBtn?.addEventListener("click", async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      installBtn.disabled = true;
-      return;
+    setBusStatus("앱 설치를 준비하는 중…");
+    try {
+      const installed = await triggerPwaInstall();
+      setBusStatus("");
+      if (!installed) {
+        setBusStatus(getManualInstallHint());
+      }
+    } catch (error) {
+      setBusStatus("");
+      console.error(error);
+      setBusStatus(getManualInstallHint());
     }
-    setBusStatus(
-      "브라우저 메뉴(⋮)에서 '앱 설치' 또는 '홈 화면에 추가'를 눌러 주세요. iPhone은 공유(↑) 버튼을 이용하세요."
-    );
   });
 
   window.addEventListener("appinstalled", () => {
@@ -2420,7 +2478,8 @@ async function syncServiceWorker() {
 
   const swUrl = `./sw.js?build=${serverBuild}`;
   const shouldRegister =
-    !registration || (serverBuild > controllerBuild && serverBuild > registeredTargetBuild);
+    !registration ||
+    (serverBuild !== controllerBuild && serverBuild !== registeredTargetBuild);
 
   if (shouldRegister) {
     registration = await navigator.serviceWorker.register(swUrl, { scope: "./" });

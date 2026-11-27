@@ -45,6 +45,14 @@
 
     <title>버스첩 — 정류장 버스시간표 사진 저장</title>
     <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      window.__pwaDeferredInstall = null;
+      window.addEventListener("beforeinstallprompt", function (event) {
+        event.preventDefault();
+        window.__pwaDeferredInstall = event;
+        window.dispatchEvent(new Event("pwa-install-available"));
+      });
+    </script>
     <link rel="icon" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="stylesheet" href="./css/styles.css" />

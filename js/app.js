@@ -1158,9 +1158,26 @@ function migrateLegacyBusStorage() {
   }
 }
 
+function readPersistedStateUpdatedAt() {
+  try {
+    const raw = localStorage.getItem(BUS_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return typeof data.stateUpdatedAt === "string" && data.stateUpdatedAt
+      ? data.stateUpdatedAt
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function saveBusState() {
   try {
-    const stateUpdatedAt = new Date().toISOString();
+    const signedIn =
+      typeof window.busAppIsCloudSignedIn === "function" && window.busAppIsCloudSignedIn();
+    const stateUpdatedAt = signedIn
+      ? new Date().toISOString()
+      : readPersistedStateUpdatedAt() || new Date().toISOString();
     localStorage.setItem(
       BUS_STORAGE_KEY,
       JSON.stringify({ version: 3, stops: busStops, stateUpdatedAt })

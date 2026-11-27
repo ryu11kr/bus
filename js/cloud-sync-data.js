@@ -170,6 +170,65 @@ function filterValidStops(stops) {
   return (stops || []).filter((s) => s?.name && getStopPhotos(s).length);
 }
 
+/** @param {Record<string, unknown>[]} remoteStops */
+function remoteStopIdSet(remoteStops) {
+  const ids = new Set();
+  for (const r of remoteStops || []) {
+    if (r?.id) ids.add(String(r.id));
+  }
+  return ids;
+}
+
+/** 서버에 없고 로그아웃 상태에서만 이 기기에 추가된 정류장 */
+function localOnlyStops(localStops, remoteStops) {
+  const remoteIds = remoteStopIdSet(remoteStops);
+  return (localStops || []).filter((s) => s?.id && !remoteIds.has(String(s.id)));
+}
+
+function normalizeLocalStop(stop) {
+  const api = busPhotosApi();
+  if (api?.normalizeStopPhotos) return api.normalizeStopPhotos({ ...stop });
+  return { ...stop };
+}
+
+/** 서버 목록 시각이 더 최신일 때: 로그아웃 중 이 기기에서만 바뀐 정류장은 로컬 우선 */
+function mergeStopWhenServerListWins(local, remote) {
+  const locAt = new Date(local?.updatedAt || 0).getTime();
+  const remAt = new Date(remote?.updatedAt || 0).getTime();
+  if (locAt > remAt) return normalizeLocalStop(local);
+  return mergeStopRecord(local, remote);
+}
+
+function stopSyncSignature(stop) {
+  if (!stop?.id) return "";
+  const photos = getStopPhotos(stop).map((p) => ({
+    id: p.id,
+    u: p.updatedAt || "",
+    l: p.label || "",
+    n: String(p.ocrText || "").length,
+    c: String(p.photoThumb || "").length,
+  }));
+  return `${stop.name}|${stop.updatedAt || ""}|${JSON.stringify(photos)}`;
+}
+
+/** 로그아웃 중 로컬만 바뀐 뒤 재로그인 시 서버로 올려야 할 변경 */
+function localLogoutEditsPendingSync(localStops, remoteStops) {
+  if (localOnlyStops(localStops, remoteStops).length) return true;
+  const remoteIds = remoteStopIdSet(remoteStops);
+  for (const loc of localStops || []) {
+    if (!loc?.id) continue;
+    const id = String(loc.id);
+    if (!remoteIds.has(id)) continue;
+    const rem = (remoteStops || []).find((r) => String(r?.id) === id);
+    if (!rem) continue;
+    if (new Date(loc.updatedAt || 0).getTime() > new Date(rem.updatedAt || 0).getTime()) {
+      return true;
+    }
+    if (stopSyncSignature(loc) !== stopSyncSignature(rem)) return true;
+  }
+  return false;
+}
+
 /**
  * @param {Record<string, unknown>[]} localStops
  * @param {Record<string, unknown>[]} remoteStops
@@ -208,15 +267,25 @@ export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
   const byId = new Map();
 
   if (remoteListAt >= localListAt) {
+    const needsCloudPush = localLogoutEditsPendingSync(local, remote);
     for (const r of remote) {
       if (!r?.id) continue;
       const id = String(r.id);
       const loc = local.find((s) => String(s.id) === id);
-      byId.set(id, loc ? mergeStopRecord(loc, r) : r);
+      byId.set(id, loc ? mergeStopWhenServerListWins(loc, r) : r);
+    }
+    const remoteIds = remoteStopIdSet(remote);
+    for (const s of local) {
+      if (!s?.id) continue;
+      const id = String(s.id);
+      if (!remoteIds.has(id)) byId.set(id, s);
     }
     return {
       stops: filterValidStops(Array.from(byId.values())),
-      stateUpdatedAt: new Date(Math.max(remoteListAt, localListAt) || Date.now()).toISOString(),
+      stateUpdatedAt: needsCloudPush
+        ? new Date().toISOString()
+        : new Date(Math.max(remoteListAt, localListAt) || Date.now()).toISOString(),
+      needsCloudPush,
     };
   }
 
@@ -238,10 +307,15 @@ export function mergeStopsWithListRevision(localStops, remoteStops, listTimes) {
     return {
       stops: filterValidStops(Array.from(byId.values())),
       stateUpdatedAt: new Date(localListAt).toISOString(),
+      needsCloudPush: true,
     };
   }
 
-  return { stops: filterValidStops([]), stateUpdatedAt: new Date().toISOString() };
+  return {
+    stops: filterValidStops([]),
+    stateUpdatedAt: new Date().toISOString(),
+    needsCloudPush: false,
+  };
 }
 
 function localListRevisionMs(localState, localStops) {
@@ -280,6 +354,17 @@ export async function pullAndMergeCloudState(client, userId) {
 
   if (!remoteStopsRaw.length) {
     if (remoteListAt >= localListAt) {
+      if (localStops.length) {
+        const merged = filterValidStops(localStops);
+        window.__busCloudSyncApplying = true;
+        try {
+          applyLocal(merged, { stateUpdatedAt: new Date().toISOString() });
+        } finally {
+          window.__busCloudSyncApplying = false;
+        }
+        scheduleCloudPush(client, userId, 400);
+        return;
+      }
       window.__busCloudSyncApplying = true;
       try {
         applyLocal([], {
@@ -295,10 +380,14 @@ export async function pullAndMergeCloudState(client, userId) {
   }
 
   const hydrated = await hydrateRemoteStops(client, remoteStopsRaw);
-  let { stops: merged, stateUpdatedAt } = mergeStopsWithListRevision(localStops, hydrated, {
-    localListAt,
-    remoteListAt,
-  });
+  let { stops: merged, stateUpdatedAt, needsCloudPush } = mergeStopsWithListRevision(
+    localStops,
+    hydrated,
+    {
+      localListAt,
+      remoteListAt,
+    }
+  );
   if (merged.length > CLOUD_MAX_STOPS) {
     merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     merged.length = CLOUD_MAX_STOPS;
@@ -311,7 +400,7 @@ export async function pullAndMergeCloudState(client, userId) {
     window.__busCloudSyncApplying = false;
   }
 
-  if (localListAt > remoteListAt) scheduleCloudPush(client, userId, 400);
+  if (needsCloudPush) scheduleCloudPush(client, userId, 400);
 }
 
 export async function pushLocalStateToCloud(client, userId) {
@@ -432,6 +521,9 @@ export async function runFullCloudSync(client, userId) {
 export function bindCloudSaveListener(client, userId, enabled) {
   window.addEventListener("bus-local-state-saved", () => {
     if (!enabled || !userId) return;
+    if (typeof window.busAppIsCloudSignedIn === "function" && !window.busAppIsCloudSignedIn()) {
+      return;
+    }
     scheduleCloudPush(client, userId);
   });
 }

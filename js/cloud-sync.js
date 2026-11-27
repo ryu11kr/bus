@@ -68,6 +68,10 @@ let supabaseClient = null;
 
 let cloudSaveListenerBound = false;
 let accountDeleteUiBound = false;
+/** 로그아웃 상태에서 로컬만 바뀐 경우 서버 목록 시각이 이김 */
+let cloudSessionSignedIn = false;
+
+window.busAppIsCloudSignedIn = () => cloudSessionSignedIn;
 
 /**
  * @returns {Promise<CloudSyncRuntime | null>}
@@ -356,6 +360,7 @@ async function initGoogleAuthUi(client, cfg) {
   async function renderSession(session) {
     const ticket = ++renderSerial;
     const signedIn = Boolean(session?.user);
+    cloudSessionSignedIn = signedIn;
     loginBtn.hidden = signedIn;
     logoutBtn.hidden = !signedIn;
     loginBtn.disabled = false;

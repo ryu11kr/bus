@@ -680,6 +680,10 @@ function bindPhotoViewer() {
   let ty = 0;
   let pinchStartDist = 0;
   let pinchStartZoom = 1;
+  let pinchStartTx = 0;
+  let pinchStartTy = 0;
+  let pinchFocusX = 0;
+  let pinchFocusY = 0;
   let panPointerId = null;
   let panStartX = 0;
   let panStartY = 0;
@@ -693,6 +697,26 @@ function bindPhotoViewer() {
 
   function totalScale() {
     return fitScale * userZoom;
+  }
+
+  /** 배율 변경 시 (fx,fy) 화면 좌표 아래 같은 이미지 지점이 유지되도록 pan 보정 */
+  function setUserZoomAtStagePoint(fx, fy, nextUserZoom) {
+    const prevUserZoom = userZoom;
+    const clamped = Math.min(MAX_USER_ZOOM, Math.max(1, nextUserZoom));
+    if (clamped <= 1.01) {
+      userZoom = 1;
+      setZoomFit();
+      return;
+    }
+    userZoom = clamped;
+    const s0 = fitScale * prevUserZoom;
+    const s1 = fitScale * userZoom;
+    if (s0 > 0 && Math.abs(s1 - s0) > 1e-6) {
+      const ratio = s1 / s0;
+      tx = fx - (fx - tx) * ratio;
+      ty = fy - (fy - ty) * ratio;
+    }
+    applyViewerTransform();
   }
 
   function clampPan() {
@@ -745,8 +769,8 @@ function bindPhotoViewer() {
   }
 
   function zoomInStep() {
-    userZoom = Math.min(MAX_USER_ZOOM, userZoom * 1.5);
-    applyViewerTransform();
+    const { w, h } = stageMetrics();
+    setUserZoomAtStagePoint(w / 2, h / 2, userZoom * 1.5);
     stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
   }
 
@@ -755,12 +779,8 @@ function bindPhotoViewer() {
       setZoomFit();
       return;
     }
-    userZoom = Math.max(1, userZoom / 1.35);
-    if (userZoom <= 1.01) {
-      setZoomFit();
-      return;
-    }
-    applyViewerTransform();
+    const { w, h } = stageMetrics();
+    setUserZoomAtStagePoint(w / 2, h / 2, userZoom / 1.35);
     stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
   }
 
@@ -918,6 +938,11 @@ function bindPhotoViewer() {
       if (e.touches.length === 2) {
         pinchStartDist = touchDistance(e.touches);
         pinchStartZoom = userZoom;
+        pinchStartTx = tx;
+        pinchStartTy = ty;
+        const rect = stage.getBoundingClientRect();
+        pinchFocusX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+        pinchFocusY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
         panPointerId = null;
       }
     },
@@ -933,9 +958,22 @@ function bindPhotoViewer() {
       const dist = touchDistance(e.touches);
       if (pinchStartDist > 0) {
         const ratio = dist / pinchStartDist;
-        userZoom = Math.min(MAX_USER_ZOOM, Math.max(1, pinchStartZoom * ratio));
-        if (userZoom <= 1.01) userZoom = 1;
-        applyViewerTransform();
+        const nextZoom = pinchStartZoom * ratio;
+        if (nextZoom <= 1.01) {
+          userZoom = 1;
+          setZoomFit();
+        } else {
+          const clamped = Math.min(MAX_USER_ZOOM, nextZoom);
+          const s0 = fitScale * pinchStartZoom;
+          const s1 = fitScale * clamped;
+          userZoom = clamped;
+          if (s0 > 0 && Math.abs(s1 - s0) > 1e-6) {
+            const scaleRatio = s1 / s0;
+            tx = pinchFocusX - (pinchFocusX - pinchStartTx) * scaleRatio;
+            ty = pinchFocusY - (pinchFocusY - pinchStartTy) * scaleRatio;
+          }
+          applyViewerTransform();
+        }
         stage.classList.toggle("photo-viewer-stage--pan", canPanImage());
       }
     },
